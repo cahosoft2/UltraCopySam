@@ -36,6 +36,7 @@ UltraCopySam.exe "D:\proyectos" "E:\backup\proyectos"
 - [Limitaciones](#limitaciones)
 - [Compilación](#compilación)
 - [Estructura del código](#estructura-del-código)
+- [Licencia](#licencia)
 
 ---
 
@@ -524,3 +525,20 @@ go vet ./...
 | `path.go` | Conversión a rutas extendidas `\\?\` |
 
 Todos los archivos llevan la etiqueta de compilación `//go:build windows`.
+
+---
+
+## Licencia
+
+**[BSD Zero Clause License (0BSD)](LICENSE)** — la licencia más permisiva que
+existe.
+
+Puedes usar, copiar, modificar, redistribuir y vender este software, con o sin
+fines comerciales, sin ninguna condición: **ni siquiera se exige conservar el
+aviso de copyright ni mencionar al autor**. Es equivalente a ponerlo en el
+dominio público, pero redactado como licencia para que sea válida en cualquier
+jurisdicción.
+
+Lo único que hace la licencia es lo que toda licencia de software libre debe
+hacer: dejar claro que el software se entrega **tal cual**, sin garantías, y
+que el autor no responde por los daños que su uso pueda ocasionar.

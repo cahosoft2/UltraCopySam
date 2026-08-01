@@ -22,7 +22,9 @@ jobs:
         uses: actions/setup-go@v5
         with:
           go-version: 'stable'
-          cache: true
+          # El proyecto no tiene dependencias externas, así que no hay go.sum
+          # que cachear: dejarlo activo solo genera un aviso en cada ejecución.
+          cache: false
 
       - name: go vet
         run: go vet ./...

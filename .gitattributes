@@ -1,0 +1,19 @@
+# Los archivos Go deben usar LF siempre, incluso en Windows: gofmt trata un
+# archivo con CRLF como "sin formatear", lo que hacía fallar la comprobación de
+# formato del CI al hacer checkout en un runner de Windows.
+*.go text eol=lf
+
+# Configuración y documentación, también en LF por coherencia entre plataformas.
+*.yml   text eol=lf
+*.yaml  text eol=lf
+*.md    text eol=lf
+*.mod   text eol=lf
+LICENSE text eol=lf
+.gitignore    text eol=lf
+.gitattributes text eol=lf
+
+# Los scripts de PowerShell conservan CRLF, la convención en Windows.
+*.ps1 text eol=crlf
+
+# Binarios: que Git no toque su contenido.
+*.exe binary

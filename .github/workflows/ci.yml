@@ -1,0 +1,84 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build and check
+    runs-on: windows-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: 'stable'
+          cache: true
+
+      - name: go vet
+        run: go vet ./...
+
+      - name: Check formatting
+        shell: pwsh
+        run: |
+          $sinFormato = gofmt -l .
+          if ($sinFormato) {
+            Write-Host "::error::Estos archivos no están formateados con gofmt:"
+            $sinFormato | ForEach-Object { Write-Host "  $_" }
+            exit 1
+          }
+          Write-Host "Todos los archivos están correctamente formateados."
+
+      - name: Build
+        run: go build -trimpath -ldflags "-s -w" -o UltraCopySam.exe .
+
+      - name: Smoke test
+        shell: pwsh
+        run: |
+          # Sin argumentos debe imprimir la ayuda y salir con código 2.
+          .\UltraCopySam.exe *> $null
+          if ($LASTEXITCODE -ne 2) {
+            throw "Se esperaba código de salida 2 sin argumentos, se obtuvo $LASTEXITCODE"
+          }
+
+          # Copia real: se verifica el contenido, no solo que no falle.
+          New-Item -ItemType Directory -Force origen\sub | Out-Null
+          Set-Content origen\a.txt      'hola'
+          Set-Content origen\sub\b.txt  'mundo'
+
+          .\UltraCopySam.exe -q origen destino
+          if ($LASTEXITCODE -ne 0) { throw "La copia falló con el código $LASTEXITCODE" }
+          if ((Get-Content destino\a.txt)     -ne 'hola')  { throw "Contenido incorrecto en a.txt" }
+          if ((Get-Content destino\sub\b.txt) -ne 'mundo') { throw "Contenido incorrecto en sub\b.txt" }
+
+          # Modo incremental: la segunda pasada no debe copiar nada.
+          $salida = .\UltraCopySam.exe -u origen destino 2>&1 | Out-String
+          if ($salida -notmatch 'sin cambios') {
+            throw "-u no reportó archivos sin cambios. Salida: $salida"
+          }
+
+          # Un cambio real sí debe copiarse, aunque conserve el tamaño.
+          Start-Sleep -Seconds 2
+          Set-Content origen\a.txt 'HOLA'
+          .\UltraCopySam.exe -u -q origen destino
+          if ((Get-Content destino\a.txt) -ne 'HOLA') {
+            throw "-u no copió un archivo modificado que conserva el tamaño"
+          }
+
+          Write-Host "Smoke test superado."
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: UltraCopySam-${{ github.sha }}
+          path: UltraCopySam.exe
+          retention-days: 14

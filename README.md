@@ -1,57 +1,67 @@
 # UltraCopySam
 
-Utilitario de línea de comandos para **Windows** que copia un directorio
-completo —archivos y subcarpetas— a otro destino, **reemplazando lo que exista
-sin preguntar** y con el máximo rendimiento posible.
+[![CI](https://github.com/cahosoft2/UltraCopySam/actions/workflows/ci.yml/badge.svg)](https://github.com/cahosoft2/UltraCopySam/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/cahosoft2/UltraCopySam)](https://github.com/cahosoft2/UltraCopySam/releases/latest)
+[![Downloads](https://img.shields.io/github/downloads/cahosoft2/UltraCopySam/total)](https://github.com/cahosoft2/UltraCopySam/releases)
+[![License: 0BSD](https://img.shields.io/badge/license-0BSD-blue.svg)](LICENSE)
+[![Platform: Windows](https://img.shields.io/badge/platform-Windows%20x64-0078D6)](https://github.com/cahosoft2/UltraCopySam/releases/latest)
 
-Está escrito en Go pero no usa la biblioteca estándar para copiar: llama
-directamente a la API nativa de Win32, de modo que **los bytes los mueve el
-kernel de Windows** y nunca pasan por buffers del programa.
+*[Versión en español](README.es.md)*
+
+A Windows command-line tool that copies an entire directory tree to another
+location, **overwriting whatever is there without asking**, as fast as the
+hardware allows.
+
+It is written in Go, but it does not use the standard library to copy: it calls
+the native Win32 API directly, so **the Windows kernel moves the bytes** and
+they never pass through the program's buffers.
 
 ```powershell
-UltraCopySam.exe "D:\proyectos" "E:\backup\proyectos"
+UltraCopySam.exe "D:\projects" "E:\backup\projects"
 ```
 
 ```text
-1284 archivos | 3491.84 MB | 812.44 MB/s
+1284 files | 3491.84 MB | 812.44 MB/s
 ```
 
 ---
 
-## Índice
+## Contents
 
-- [Descarga](#descarga)
-- [Windows SmartScreen y antivirus](#windows-smartscreen-y-antivirus)
-- [Características](#características)
-- [Instalación](#instalación)
-- [Uso](#uso)
-- [Opciones](#opciones)
-- [Ejemplos](#ejemplos)
-- [Copias incrementales](#copias-incrementales)
-- [Comillas dobles y rutas con espacios](#comillas-dobles-y-rutas-con-espacios)
-- [Discos externos USB](#discos-externos-usb)
-- [Qué muestra durante la copia](#qué-muestra-durante-la-copia)
-- [Comportamiento](#comportamiento)
-- [Validaciones](#validaciones)
-- [Cómo consigue la velocidad](#cómo-consigue-la-velocidad)
-- [Elegir el número de workers](#elegir-el-número-de-workers)
-- [Limitaciones](#limitaciones)
-- [Compilación](#compilación)
-- [Estructura del código](#estructura-del-código)
-- [Licencia](#licencia)
+- [Download](#download)
+- [Windows SmartScreen and antivirus](#windows-smartscreen-and-antivirus)
+- [Features](#features)
+- [Installation](#installation)
+- [Usage](#usage)
+- [Options](#options)
+- [Examples](#examples)
+- [Incremental copies](#incremental-copies)
+- [Benchmarks vs robocopy](#benchmarks-vs-robocopy)
+- [Should you use this instead of robocopy?](#should-you-use-this-instead-of-robocopy)
+- [Double quotes and paths with spaces](#double-quotes-and-paths-with-spaces)
+- [External USB drives](#external-usb-drives)
+- [What it shows while copying](#what-it-shows-while-copying)
+- [Behaviour](#behaviour)
+- [Validation](#validation)
+- [How it gets its speed](#how-it-gets-its-speed)
+- [Choosing the worker count](#choosing-the-worker-count)
+- [Limitations](#limitations)
+- [Building](#building)
+- [Code layout](#code-layout)
+- [License](#license)
 
 ---
 
-## Descarga
+## Download
 
-Descarga la última versión desde la página de
-**[Releases](https://github.com/cahosoft2/UltraCopySam/releases)**, o
-directamente:
+Get the latest build from the
+**[Releases page](https://github.com/cahosoft2/UltraCopySam/releases)**, or
+directly:
 
 **[⬇ UltraCopySamV002.exe](https://github.com/cahosoft2/UltraCopySam/releases/download/v0.0.2/UltraCopySamV002.exe)**
-— Windows 64 bits · 1,91 MB · sin instalador ni dependencias
+— Windows 64-bit · 1.91 MB · no installer, no dependencies
 
-Verifica la descarga comparando su huella SHA256:
+Verify the download against its SHA256 hash:
 
 ```powershell
 Get-FileHash UltraCopySamV002.exe -Algorithm SHA256
@@ -62,51 +72,49 @@ E22891936853ECBB3EB244669AFAA16232BFBE78B3E8247764E7630E05D233B6
 ```
 
 > [!NOTE]
-> Windows mostrará la advertencia *"Windows protegió su PC"* la primera vez que
-> ejecutes el archivo descargado. Es normal y tiene solución en un solo comando:
-> ver [Windows SmartScreen y antivirus](#windows-smartscreen-y-antivirus).
+> Windows will show a *"Windows protected your PC"* warning the first time you
+> run the downloaded file. This is expected and takes one command to fix — see
+> [Windows SmartScreen and antivirus](#windows-smartscreen-and-antivirus).
 
 ---
 
-## Windows SmartScreen y antivirus
+## Windows SmartScreen and antivirus
 
-Al ejecutar el `.exe` recién descargado, Windows muestra una pantalla azul con
-el mensaje **"Windows protegió su PC"** y solo ofrece el botón *No ejecutar*.
+When you run the freshly downloaded `.exe`, Windows shows a blue screen reading
+**"Windows protected your PC"**, offering only a *Don't run* button.
 
-**Esto no significa que el programa sea peligroso.** Ocurre porque el
-ejecutable no está firmado con un certificado de código, que cuesta entre 300 y
-600 USD al año. Windows marca todo binario descargado de internet y sin firmar,
-sin importar lo que haga.
+**This does not mean the program is dangerous.** It happens because the
+executable is not signed with a code-signing certificate, which costs 300-600
+USD per year. Windows flags every unsigned binary downloaded from the internet,
+regardless of what it does.
 
-Tienes tres formas de resolverlo, de la más rápida a la más segura.
+There are three ways around it, from quickest to safest.
 
-### Opción 1 — Desbloquear el archivo (recomendada)
+### Option 1 — Unblock the file (recommended)
 
-Al descargar cualquier archivo, Windows le añade una marca invisible llamada
-*Mark of the Web* que indica "esto vino de internet". Basta con quitarla:
+When you download any file, Windows attaches an invisible marker called the
+*Mark of the Web* that means "this came from the internet". Just remove it:
 
 ```powershell
 Unblock-File .\UltraCopySamV002.exe
 ```
 
-A partir de ahí el programa se ejecuta con normalidad, sin más advertencias.
+From then on the program runs normally, with no further warnings.
 
-También puedes hacerlo con el ratón: clic derecho sobre el archivo →
-**Propiedades** → marcar la casilla **Desbloquear** al final de la pestaña
-*General* → *Aceptar*.
+You can also do it with the mouse: right-click the file → **Properties** → tick
+**Unblock** at the bottom of the *General* tab → *OK*.
 
-### Opción 2 — Ejecutarlo de todas formas
+### Option 2 — Run it anyway
 
-En la propia pantalla de advertencia, pulsa **Más información** y luego el
-botón **Ejecutar de todas formas** que aparece debajo. Windows recordará la
-decisión para ese archivo.
+On the warning screen itself, click **More info** and then the **Run anyway**
+button that appears below. Windows remembers the decision for that file.
 
-### Opción 3 — Compilarlo tú mismo (la más segura)
+### Option 3 — Build it yourself (safest)
 
-Si prefieres no confiar en un ejecutable descargado —una postura razonable
-tratándose de una herramienta que sobrescribe archivos—, compílalo desde el
-código fuente. Un binario compilado en tu propia máquina **nunca dispara
-SmartScreen**, porque no procede de internet:
+If you would rather not trust a downloaded executable — a reasonable stance for
+a tool that overwrites files — build it from source. A binary compiled on your
+own machine **never triggers SmartScreen**, because it did not come from the
+internet:
 
 ```powershell
 git clone https://github.com/cahosoft2/UltraCopySam.git
@@ -114,82 +122,82 @@ cd UltraCopySam
 go build -trimpath -ldflags "-s -w" -o UltraCopySam.exe .
 ```
 
-Requiere [Go](https://go.dev/dl/) instalado. Todo el código fuente son unas
-1200 líneas repartidas en 6 archivos, auditables en unos minutos.
+Requires [Go](https://go.dev/dl/). The whole source is about 1,300 lines across
+6 files — auditable in a few minutes.
 
-### Sobre los falsos positivos de antivirus
+### About antivirus false positives
 
-Los binarios de Go sin firmar generan falsos positivos con cierta frecuencia,
-porque el compilador enlaza todo estáticamente en un único archivo y varios
-motores heurísticos consideran ese patrón sospechoso.
+Unsigned Go binaries trigger false positives fairly often, because the compiler
+links everything statically into a single file and several heuristic engines
+treat that pattern as suspicious.
 
-Si tu antivirus bloquea el archivo, verifica primero su huella SHA256 (ver
-[Descarga](#descarga)): si coincide con la publicada, el archivo es
-exactamente el que se compiló y no ha sido alterado. Después, añade una
-exclusión o utiliza la Opción 3.
+If your antivirus blocks the file, first check its SHA256 hash (see
+[Download](#download)): if it matches the published one, the file is exactly
+what was compiled and has not been tampered with. Then add an exclusion, or use
+Option 3.
 
-### ¿Por qué no está firmado?
+### Why isn't it signed?
 
-Firmar un ejecutable para Windows exige un certificado de código de una
-autoridad reconocida, con verificación de identidad y renovación anual. Para
-una utilidad gratuita de código abierto el coste no se justifica.
+Signing a Windows executable requires a certificate from a recognised
+authority, with identity verification and annual renewal. For a free
+open-source utility the cost is hard to justify.
 
-Las alternativas que existen, por si el proyecto crece:
+The available routes, should the project grow:
 
-| Vía | Coste aproximado | ¿Elimina SmartScreen? |
+| Route | Approximate cost | Removes SmartScreen? |
 | --- | --- | --- |
-| [Azure Trusted Signing](https://azure.microsoft.com/products/trusted-signing) | ~10 USD/mes | Sí, de inmediato |
-| Certificado EV (DigiCert, Sectigo…) | 300-600 USD/año | Sí, de inmediato |
-| [SignPath Foundation](https://signpath.org/) (gratis para OSS) | Gratis | Progresivamente, al acumular reputación |
-| Publicar en Microsoft Store | ~19 USD, pago único | Sí (las apps de la Store no pasan por SmartScreen) |
+| [Azure Trusted Signing](https://azure.microsoft.com/products/trusted-signing) | ~10 USD/month | Yes, immediately |
+| EV certificate (DigiCert, Sectigo…) | 300-600 USD/year | Yes, immediately |
+| [SignPath Foundation](https://signpath.org/) (free for OSS) | Free | Gradually, as reputation builds |
+| Publishing on the Microsoft Store | ~19 USD, one-off | Yes (Store apps bypass SmartScreen) |
 
 ---
 
-## Características
+## Features
 
-- **Copia a bajo nivel** con `CopyFileExW`: el kernel transfiere los datos de un
-  handle a otro sin pasar por espacio de usuario.
-- **Paralelismo real**: un pool de workers recorre el árbol y copia al mismo
-  tiempo, sin esperar a terminar de listar para empezar a copiar.
-- **Reemplaza siempre**, sin confirmaciones. Incluso si el archivo de destino
-  está marcado como *solo lectura*, *oculto* o *sistema*.
-- **Sin límite de `MAX_PATH`**: soporta rutas de más de 260 caracteres mediante
-  el prefijo extendido `\\?\`.
-- **Tolerante a fallos**: un archivo bloqueado o sin permisos no aborta la
-  copia; se reporta y el resto continúa.
-- **Validación previa** de argumentos y rutas, con mensajes explicativos en
-  español.
-- **Un único ejecutable** sin dependencias: no requiere Go instalado, ni
-  runtime, ni DLLs adicionales.
+- **Low-level copying** via `CopyFileExW`: the kernel transfers data from one
+  handle to another without going through user space.
+- **True parallelism**: a worker pool walks the tree and copies at the same
+  time, without waiting for the listing to finish before copying starts.
+- **Always overwrites**, no confirmations — even if the destination file is
+  marked *read-only*, *hidden* or *system*.
+- **Incremental mode** (`-u`): skips files whose size and timestamp already
+  match at the destination.
+- **No `MAX_PATH` limit**: handles paths longer than 260 characters through the
+  `\\?\` extended prefix.
+- **Fault tolerant**: a locked or permission-denied file does not abort the
+  copy; it is reported and the rest continues.
+- **Up-front validation** of arguments and paths, with explanatory messages.
+- **A single executable** with no dependencies: no Go runtime, no extra DLLs.
 
 ---
 
-## Instalación
+## Installation
 
-### Instalación automática (recomendada)
+### Automatic install (recommended)
 
-Ejecuta esto en PowerShell y listo:
+Run this in PowerShell:
 
 ```powershell
 irm https://raw.githubusercontent.com/cahosoft2/UltraCopySam/main/install.ps1 | iex
 ```
 
-El instalador se encarga de todo:
+The installer takes care of everything:
 
-1. Descarga la última versión desde GitHub Releases.
-2. Muestra su huella SHA256 para que puedas verificarla.
-3. La instala en `%LOCALAPPDATA%\Programs\UltraCopySam`.
-4. La **desbloquea** para que SmartScreen no interfiera (`Unblock-File`).
-5. La agrega al `PATH` del usuario.
-6. Comprueba que el ejecutable responde.
+1. Downloads the latest release from GitHub.
+2. Prints its SHA256 hash so you can verify it.
+3. Installs it to `%LOCALAPPDATA%\Programs\UltraCopySam`.
+4. **Unblocks** it so SmartScreen stays out of the way (`Unblock-File`).
+5. Adds it to the user `PATH`.
+6. Checks that the executable responds.
 
-**No requiere permisos de administrador**: todo queda en tu perfil de usuario.
-Abre una terminal nueva al terminar para que el `PATH` surta efecto.
+**No administrator rights required** — everything lands in your user profile.
+Open a new terminal afterwards so the `PATH` change takes effect.
 
 > [!TIP]
-> Si prefieres revisar el script antes de ejecutarlo —buena costumbre con
-> cualquier instalador de internet—, ábrelo primero:
-> [install.ps1](install.ps1). También puedes descargarlo y ejecutarlo aparte:
+> If you would rather read the script before running it — a good habit with any
+> installer from the internet — open it first: [install.ps1](install.ps1). You
+> can also download and run it separately:
 >
 > ```powershell
 > irm https://raw.githubusercontent.com/cahosoft2/UltraCopySam/main/install.ps1 -OutFile install.ps1
@@ -197,271 +205,317 @@ Abre una terminal nueva al terminar para que el `PATH` surta efecto.
 > .\install.ps1
 > ```
 
-#### Opciones del instalador
+#### Installer options
 
-| Parámetro | Descripción |
+| Parameter | Description |
 | --- | --- |
-| `-Version v0.0.2` | Instala una versión concreta en lugar de la última |
-| `-InstallDir "D:\herramientas"` | Cambia la carpeta de instalación |
-| `-FromFile ".\UltraCopySam.exe"` | Instala desde un archivo local, sin descargar |
-| `-NoPath` | No modifica el `PATH` |
-| `-Uninstall` | Desinstala: borra la carpeta y limpia el `PATH` |
+| `-Version v0.0.2` | Install a specific version instead of the latest |
+| `-InstallDir "D:\tools"` | Change the install folder |
+| `-FromFile ".\UltraCopySam.exe"` | Install from a local file, no download |
+| `-NoPath` | Do not modify `PATH` |
+| `-Uninstall` | Uninstall: remove the folder and clean up `PATH` |
 
 ```powershell
-# Instalar en otra carpeta, sin tocar el PATH
-.\install.ps1 -InstallDir "D:\herramientas\UltraCopySam" -NoPath
+# Install elsewhere, leaving PATH alone
+.\install.ps1 -InstallDir "D:\tools\UltraCopySam" -NoPath
 
-# Desinstalar
+# Uninstall
 .\install.ps1 -Uninstall
 ```
 
 > [!NOTE]
-> Si PowerShell bloquea la ejecución del script por su directiva de
-> ejecución, ejecútalo así (afecta solo a ese proceso, no cambia la
-> configuración de tu sistema):
+> If PowerShell blocks the script because of its execution policy, run it like
+> this (affects only that process, it does not change your system settings):
 >
 > ```powershell
 > powershell -ExecutionPolicy Bypass -File .\install.ps1
 > ```
 
-### Instalación manual
+### Manual install
 
-Descarga `UltraCopySam.exe` de [Releases](https://github.com/cahosoft2/UltraCopySam/releases)
-o compílalo (ver [Compilación](#compilación)), desbloquéalo y colócalo donde
-prefieras:
+Download `UltraCopySam.exe` from
+[Releases](https://github.com/cahosoft2/UltraCopySam/releases) or build it (see
+[Building](#building)), unblock it and put it wherever you like:
 
 ```powershell
 Unblock-File .\UltraCopySamV002.exe
 ```
 
-Para poder invocarlo como `UltraCopySam` desde cualquier carpeta, añade su
-directorio al `PATH`:
+To call it as `UltraCopySam` from any folder, add its directory to `PATH`:
 
 ```powershell
-# Solo para la sesión actual
-$env:PATH += ";D:\herramientas\UltraCopySam"
+# Current session only
+$env:PATH += ";D:\tools\UltraCopySam"
 ```
 
-Para hacerlo permanente, lo más seguro es usar el instalador con `-FromFile`,
-que escribe el `PATH` sin alterar las variables que contenga:
+To make it permanent, the safest route is the installer with `-FromFile`, which
+writes `PATH` without expanding any variables it may contain:
 
 ```powershell
-.\install.ps1 -FromFile ".\UltraCopySamV002.exe" -InstallDir "D:\herramientas\UltraCopySam"
+.\install.ps1 -FromFile ".\UltraCopySamV002.exe" -InstallDir "D:\tools\UltraCopySam"
 ```
 
-Sin añadirlo al `PATH` hay que invocarlo por su ruta completa, o con `.\` si
-estás situado en su carpeta (en PowerShell el `.\` es obligatorio):
+Without it on the `PATH` you must call it by full path, or with `.\` when you
+are sitting in its folder (in PowerShell the `.\` is mandatory):
 
 ```powershell
-.\UltraCopySam.exe "D:\origen" "E:\destino"
+.\UltraCopySam.exe "D:\source" "E:\destination"
 ```
 
-**Requisitos:** Windows de 64 bits. No requiere permisos de administrador,
-salvo que las carpetas involucradas los exijan.
+**Requirements:** 64-bit Windows. No administrator rights needed, unless the
+folders involved require them.
 
 ---
 
-## Uso
+## Usage
 
 ```text
-UltraCopySam [opciones] "<directorio-origen>" "<directorio-destino>"
+UltraCopySam [options] "<source-directory>" "<destination-directory>"
 ```
 
-Se copia el **contenido** del origen dentro del destino, no la carpeta origen
-en sí:
+The **contents** of the source are copied into the destination, not the source
+folder itself:
 
 ```text
 UltraCopySam "D:\dev\old" "E:\backup"
 
-D:\dev\old\proyecto\x.txt   ->   E:\backup\proyecto\x.txt
+D:\dev\old\project\x.txt   ->   E:\backup\project\x.txt
 ```
 
-Si quieres conservar el nombre de la carpeta, inclúyelo en el destino:
+To keep the folder name, include it in the destination:
 
 ```text
 UltraCopySam "D:\dev\old" "E:\backup\old"
 
-D:\dev\old\proyecto\x.txt   ->   E:\backup\old\proyecto\x.txt
+D:\dev\old\project\x.txt   ->   E:\backup\old\project\x.txt
 ```
 
-**Códigos de salida:**
+**Exit codes:**
 
-| Código | Significado |
+| Code | Meaning |
 | --- | --- |
-| `0` | Todo se copió sin errores |
-| `1` | La copia terminó, pero algún archivo falló |
-| `2` | Uso incorrecto: faltan argumentos o alguna ruta no es válida |
+| `0` | Everything copied without errors |
+| `1` | The copy finished, but some file failed |
+| `2` | Bad usage: missing arguments or an invalid path |
 
 ---
 
-## Opciones
+## Options
 
-| Opción | Descripción |
+| Option | Description |
 | --- | --- |
-| `-u` | No copia los archivos cuyo tamaño y fecha ya coincidan en destino. Ver [Copias incrementales](#copias-incrementales). |
-| `-w N` | Número de copias en paralelo. Por defecto, el doble de núcleos de CPU. |
-| `-v` | Lista cada archivo copiado en lugar de mostrar la línea de progreso. |
-| `-q` | Modo silencioso: sin progreso ni resumen (los errores sí se muestran). |
-| `-L` | Sigue enlaces simbólicos y *junctions*. Por defecto se omiten. |
+| `-u` | Skip files whose size and timestamp already match at the destination. See [Incremental copies](#incremental-copies). |
+| `-w N` | Number of parallel copies. Defaults to twice the CPU core count. |
+| `-v` | List every copied file instead of showing the progress line. |
+| `-q` | Quiet: no progress, no summary (errors are still shown). |
+| `-L` | Follow symbolic links and junctions. Skipped by default. |
 
 > [!IMPORTANT]
-> Las opciones van **antes** de las rutas. `UltraCopySam -u "D:\a" "E:\b"`
-> funciona; `UltraCopySam "D:\a" "E:\b" -u` no, y el programa avisa de ello.
+> Options go **before** the paths. `UltraCopySam -u "D:\a" "E:\b"` works;
+> `UltraCopySam "D:\a" "E:\b" -u` does not, and the program tells you so.
 
 ---
 
-## Ejemplos
+## Examples
 
-### Copia básica
+### Basic copy
 
 ```powershell
-UltraCopySam "D:\proyectos" "E:\backup\proyectos"
+UltraCopySam "D:\projects" "E:\backup\projects"
 ```
 
-### Rutas con espacios
+### Paths with spaces
 
-Siempre entre comillas dobles.
+Always in double quotes.
 
 ```powershell
-UltraCopySam "D:\Mis Documentos\Contabilidad" "E:\Copia de seguridad\Contabilidad"
+UltraCopySam "D:\My Documents\Accounts" "E:\Backup\Accounts"
 ```
 
-### A un disco externo USB
-
-Bajando el paralelismo, ver [Discos externos USB](#discos-externos-usb).
+### Incremental backup
 
 ```powershell
-UltraCopySam -w 4 "D:\dev\old" "E:\pc_caho\backup"
+UltraCopySam -u -w 4 "D:\dev" "E:\backup\dev"
 ```
 
-### Desde un recurso de red compartido
+### To an external USB drive
+
+Lower the parallelism — see [External USB drives](#external-usb-drives).
 
 ```powershell
-UltraCopySam "\\servidor\compartido\datos" "D:\local\datos"
+UltraCopySam -w 4 "D:\dev\old" "E:\backup"
 ```
 
-### Ver el detalle de cada archivo copiado
+### From a network share
 
 ```powershell
-UltraCopySam -v "D:\origen" "E:\destino"
+UltraCopySam "\\server\share\data" "D:\local\data"
 ```
 
-### Modo silencioso, guardando solo los errores
+### List every file copied
 
 ```powershell
-UltraCopySam -q "D:\origen" "E:\destino" 2> errores.log
+UltraCopySam -v "D:\source" "E:\destination"
 ```
 
-### Guardar el resumen final en un log
-
-El progreso va a *stderr* y el resumen a *stdout*, así que pueden separarse:
+### Quiet mode, logging only errors
 
 ```powershell
-UltraCopySam "D:\origen" "E:\destino" > resumen.log
+UltraCopySam -q "D:\source" "E:\destination" 2> errors.log
 ```
 
-### Comprobar si hubo errores desde un script
+### Check for failures from a script
 
 ```powershell
-UltraCopySam "D:\origen" "E:\destino"
+UltraCopySam "D:\source" "E:\destination"
 if ($LASTEXITCODE -ne 0) {
-    Write-Host "La copia terminó con errores" -ForegroundColor Red
+    Write-Host "The copy finished with errors" -ForegroundColor Red
 }
 ```
 
-### Backup diario con carpeta fechada
+### Daily backup into a dated folder
 
 ```powershell
-$fecha = Get-Date -Format "yyyy-MM-dd"
-UltraCopySam -w 4 "D:\dev" "E:\backups\$fecha\dev"
+$date = Get-Date -Format "yyyy-MM-dd"
+UltraCopySam -u -w 4 "D:\dev" "E:\backups\$date\dev"
 ```
 
 ---
 
-## Copias incrementales
+## Incremental copies
 
-Con `-u`, antes de copiar cada archivo se comprueba si en el destino ya hay uno
-con **el mismo tamaño y la misma fecha de modificación**. Si coinciden, se
-omite.
+With `-u`, before copying each file it checks whether the destination already
+holds one with **the same size and the same modification time**. If both match,
+the file is skipped.
 
 ```powershell
 UltraCopySam -u -w 4 "D:\dev" "E:\backup\dev"
 ```
 
 ```text
-0 archivos, 41 directorios, 0.00 MB en 20ms (0.00 MB/s)
-20000 archivos sin cambios, 7.63 MB que no hubo que reescribir
+0 files, 41 directories, 0.00 MB in 20ms (0.00 MB/s)
+20000 unchanged files, 7.63 MB that did not have to be rewritten
 ```
 
-### Cuándo usarlo
+### When to use it
 
-Siempre que **repitas** una copia sobre un destino ya poblado: respaldos
-periódicos, sincronizar un disco externo, o reanudar una copia que se
-interrumpió. La ganancia es enorme porque el coste real de copiar no está en
-mover los bytes, sino en crear cada archivo en el destino.
+Any time you **repeat** a copy onto an already-populated destination: periodic
+backups, syncing an external drive, or resuming an interrupted copy. The gain is
+large because the real cost of copying is not moving the bytes — it is creating
+each file at the destination.
 
-Medición sobre un árbol de 20.000 archivos:
+Measured on a 20,000-file tree:
 
-| Escenario | Sin `-u` | Con `-u` |
+| Scenario | Without `-u` | With `-u` |
 | --- | --- | --- |
-| Primera copia (destino vacío) | 15,7 s | 14,3 s |
-| Segunda pasada (todo igual) | 10,3 s | **0,05 s** |
+| First copy (empty destination) | 15.7 s | 14.3 s |
+| Second pass (nothing changed) | 10.3 s | **0.05 s** |
 
-En la primera copia **no penaliza**: cuando una carpeta de destino acaba de
-crearse, está vacía por definición y no se consulta. En la segunda pasada es
-unas **200 veces más rápido**.
+The first copy is **not penalised**: when a destination folder has just been
+created it is empty by definition, so it is never listed. The second pass is
+roughly **200× faster**.
 
-### Cómo lo comprueba sin perder tiempo
+### How it checks without wasting time
 
-Los datos del origen ya vienen gratis con el recorrido. Los del destino se
-obtienen con **un solo listado por carpeta**, no con una consulta por archivo:
-una llamada al sistema por directorio, integrada en el mismo recorrido
-solapado, sin ninguna fase de análisis previa.
+Source metadata already comes for free with the directory walk. Destination
+metadata is fetched with **one directory listing per folder**, not one query per
+file — a single system call per directory, folded into the same overlapped walk,
+with no separate analysis pass.
 
-### Precisión de la comparación
+### Comparison accuracy
 
-En **NTFS la comparación de fechas es exacta** (resolución de 100 ns). Solo si
-el destino usa FAT o exFAT —que redondean la hora a 2 segundos— se aplica un
-margen de esa magnitud, porque de lo contrario ningún archivo coincidiría
-jamás. El sistema de archivos se detecta automáticamente.
+On **NTFS the timestamp comparison is exact** (100 ns resolution). The 2-second
+tolerance is applied *only* when the destination is FAT or exFAT, which round
+timestamps to that granularity. The filesystem is detected automatically.
 
 > [!WARNING]
-> `-u` da por idéntico un archivo que conserve **tamaño y fecha**. Si un
-> programa modifica un archivo manteniendo ambos exactamente iguales, el cambio
-> no se detecta. Es prácticamente imposible por accidente, pero si necesitas la
-> certeza absoluta de que el destino queda igual al origen, ejecuta sin `-u`:
-> el modo normal reescribe siempre.
+> `-u` treats a file as identical when **size and timestamp** match. If some
+> program modifies a file while keeping both exactly the same, the change goes
+> undetected. This is practically impossible by accident, but if you need
+> absolute certainty that the destination mirrors the source, run without `-u`:
+> the normal mode always rewrites.
 
 ---
 
-## Comillas dobles y rutas con espacios
+## Benchmarks vs robocopy
 
-Encierra siempre las rutas entre **comillas dobles**. Es lo que permite que una
-ruta con espacios llegue como un único argumento:
+Honest numbers, including where UltraCopySam loses. Measured on a single NVMe
+SSD, median of 3 runs, destination wiped before each run, against
+`robocopy /E /MT` (its multi-threaded mode).
+
+| Scenario | robocopy `/MT` | UltraCopySam | Winner |
+| --- | --- | --- | --- |
+| 20,000 small files (7.6 MB) | **10.22 s** | 12.86 s | robocopy, by 20% |
+| 8 large files (2,000 MB) | 1.49 s | **0.92 s** | UltraCopySam, **1.6× faster** |
+| Mixed: 5,006 files (734 MB) | **2.74 s** | 3.41 s | robocopy, by 20% |
+| Second pass, nothing changed | 0.03 s | 0.03 s | Tie |
+
+**Reading the results:**
+
+- With **large files** UltraCopySam is clearly ahead, thanks to
+  `COPY_FILE_NO_BUFFERING` on files of 32 MiB or more.
+- With **many small files** robocopy wins by about 20%. The bottleneck is
+  entirely per-file: the same 20,000-file walk takes **0.04 s** in `-u` mode,
+  which proves the tree walk and the work queue are not the limit —
+  `CopyFileExW` itself is.
+- For **repeated backups** both are equally fast, because neither rewrites what
+  has not changed.
+
+Reproduce them yourself with the script in
+[bench/bench.ps1](bench/bench.ps1).
+
+---
+
+## Should you use this instead of robocopy?
+
+`robocopy` ships with Windows, is battle-tested and, as the numbers above show,
+is faster for small files. It is a great tool and you should not switch away
+from it for speed alone.
+
+Where UltraCopySam is worth it:
+
+- **Large files** — measurably faster.
+- **Simplicity** — two paths and you are done, versus robocopy's ~80 switches.
+  There is no `/E /MT:32 /NFL /NDL /NJH /NJS` to memorise.
+- **Clear error messages** instead of numeric exit codes you have to look up.
+  It tells you what went wrong and how to fix it, including the classic Windows
+  trap of a trailing backslash inside quotes.
+- **Readable source** — about 1,300 lines of Go you can audit, instead of a
+  closed-source binary.
+- **Predictable behaviour** — it never deletes anything at the destination.
+  There is no `/MIR` that can wipe a folder by mistake.
+
+If you need mirroring, filters, retries or NTFS permission copying, use
+robocopy: this tool deliberately does not cover those.
+
+---
+
+## Double quotes and paths with spaces
+
+Always wrap paths in **double quotes**. That is what lets a path with spaces
+arrive as a single argument:
 
 ```powershell
-UltraCopySam "D:\Mis Datos\origen" "E:\Copia de seguridad\destino"
+UltraCopySam "D:\My Data\source" "E:\Backup\destination"
 ```
 
 > [!WARNING]
-> **No dejes una barra invertida final dentro de las comillas.**
+> **Never leave a trailing backslash inside the quotes.**
 >
-> En Windows, `"D:\origen\"` hace que la `\` **escape a la comilla de cierre**,
-> con lo que las dos rutas se fusionan en un solo argumento y el comando falla.
-> Es una trampa clásica de la línea de comandos de Windows, no un problema de
-> esta herramienta.
+> On Windows, `"D:\source\"` makes the `\` **escape the closing quote**, so both
+> paths merge into a single argument and the command fails. This is a classic
+> Windows command-line trap, not a flaw in this tool.
 >
 > ```text
-> ✗  UltraCopySam "D:\origen\" "E:\destino\"     <- mal
-> ✓  UltraCopySam "D:\origen"  "E:\destino"      <- bien
-> ✓  UltraCopySam "D:\origen\\" "E:\destino\\"   <- también válido
+> ✗  UltraCopySam "D:\source\" "E:\dest\"     <- wrong
+> ✓  UltraCopySam "D:\source"  "E:\dest"      <- right
+> ✓  UltraCopySam "D:\source\\" "E:\dest\\"   <- also valid
 > ```
 >
-> `UltraCopySam` detecta este caso concreto y explica qué ocurrió, en vez de
-> fallar con un mensaje incomprensible.
+> UltraCopySam detects this specific case and explains what happened, instead of
+> failing with a cryptic message.
 
-También se aceptan **rutas relativas**, que se resuelven contra el directorio
-actual:
+**Relative paths** are also accepted, resolved against the current directory:
 
 ```powershell
 cd D:\dev
@@ -470,249 +524,243 @@ UltraCopySam ".\old" "E:\backup\old"
 
 ---
 
-## Discos externos USB
+## External USB drives
 
-Copiar a un disco USB es el escenario donde más importa la configuración. Estas
-son las recomendaciones, ordenadas por el impacto real que tienen.
+Copying to a USB drive is where configuration matters most. These
+recommendations are ordered by actual impact.
 
-### 1. Activa la caché de escritura del disco (el mayor impacto)
+### 1. Enable write caching (biggest win)
 
-Windows configura los discos extraíbles como *"Optimizar para extracción
-rápida"*, lo que **desactiva la caché de escritura**: cada escritura viaja al
-disco de inmediato. Cambiarlo suele mejorar el rendimiento más que cualquier
-ajuste de la herramienta.
+Windows configures removable drives for *"Quick removal"*, which **disables
+write caching**: every write goes straight to the disk. Changing this usually
+helps more than any tuning of the tool itself.
 
 ```text
-Administrador de dispositivos
-  └─ Unidades de disco
-       └─ (tu disco USB) → Propiedades
-            └─ pestaña "Directivas" → marcar "Mejor rendimiento"
+Device Manager
+  └─ Disk drives
+       └─ (your USB drive) → Properties
+            └─ "Policies" tab → select "Better performance"
 ```
 
 > [!CAUTION]
-> Con esta opción activada **debes** usar siempre *"Quitar hardware de forma
-> segura"* antes de desconectar el disco. Si lo desenchufas en caliente puedes
-> perder datos que aún estaban en caché.
+> With this enabled you **must** always use *"Safely Remove Hardware"* before
+> unplugging the drive. Yanking it out can lose data still sitting in cache.
 
-### 2. Baja el número de workers
+### 2. Lower the worker count
 
-El valor por defecto (el doble de núcleos, típicamente 16–32) está pensado para
-discos internos NVMe y es **excesivo** para USB:
+The default (twice the core count, typically 16-32) targets internal NVMe drives
+and is **excessive** for USB:
 
 ```powershell
-UltraCopySam -w 4 "D:\origen" "E:\destino"     # disco USB mecánico (HDD)
-UltraCopySam -w 8 "D:\origen" "E:\destino"     # SSD en carcasa USB
+UltraCopySam -w 4 "D:\source" "E:\dest"     # mechanical USB drive (HDD)
+UltraCopySam -w 8 "D:\source" "E:\dest"     # SSD in a USB enclosure
 ```
 
-En un disco mecánico solo hay un cabezal físico: demasiadas escrituras
-simultáneas lo obligan a saltar de una zona a otra del plato y el rendimiento
-**cae** en vez de subir. Si oyes al disco castañetear de forma continua, baja a
-`-w 2`.
+A mechanical drive has a single physical head: too many concurrent writes force
+it to seek back and forth across the platter and throughput **drops** instead of
+rising. If you hear continuous clicking, go down to `-w 2`.
 
-En un SSD externo el límite lo pone el bus USB, así que pasar de 8 no aporta
-nada.
+On an external SSD the USB bus is the limit, so going beyond 8 gains nothing.
 
-Si no sabes qué hay dentro de la carcasa, empieza con `-w 4`: en un SSD pierdes
-un poco de velocidad, pero 32 workers en un mecánico sí hunden el rendimiento.
+If you do not know what is inside the enclosure, start with `-w 4`: on an SSD
+you lose a little speed, whereas 32 workers on a mechanical drive really do
+sink throughput.
 
-### 3. Verifica el puerto y el cable
+### 3. Check the port and cable
 
-Un puerto USB 2.0 te limita a unos **35 MB/s reales** y ningún ajuste lo
-soluciona. Busca puertos USB 3.0 o superior: suelen tener el interior azul o
-llevar la marca `SS` (*SuperSpeed*).
+A USB 2.0 port caps you at roughly **35 MB/s** and no setting fixes that. Look
+for USB 3.0 or later — usually blue inside or marked `SS` (*SuperSpeed*).
 
-| Estándar | Velocidad real aproximada |
+| Standard | Approximate real speed |
 | --- | --- |
 | USB 2.0 | 35 MB/s |
-| USB 3.0 / 3.1 Gen1 | 400–450 MB/s |
+| USB 3.0 / 3.1 Gen1 | 400-450 MB/s |
 | USB 3.2 Gen2 | ~1 GB/s |
 
-Un cable de mala calidad o demasiado largo puede hacer que el disco negocie a
-una velocidad inferior a la que soporta.
+A poor or overly long cable can make the drive negotiate a slower link than it
+supports.
 
-### 4. Formatea el destino en NTFS
+### 4. Format the destination as NTFS
 
-| Sistema de archivos | Recomendación |
+| Filesystem | Recommendation |
 | --- | --- |
-| **NTFS** | ✅ Recomendado. Sin límite práctico de tamaño, admite rutas largas `\\?\` y conserva los atributos de archivo |
-| exFAT | ⚠️ Funciona, pero se degrada con muchos archivos pequeños |
-| FAT32 | ❌ **No admite archivos de más de 4 GB**: fallarán, aunque el resto de la copia continúa |
+| **NTFS** | ✅ Recommended. No practical size limit, supports `\\?\` long paths, preserves file attributes |
+| exFAT | ⚠️ Works, but degrades with large numbers of small files |
+| FAT32 | ❌ **No files larger than 4 GB**: they will fail, though the rest of the copy continues |
 
-### 5. Ten expectativas realistas con archivos pequeños
+### 5. Have realistic expectations with small files
 
-Si copias carpetas de desarrollo (`node_modules`, `.git`, `vendor`), el tiempo
-**no** se va en mover bytes: se va en crear cada archivo —reservar su entrada en
-la MFT de NTFS, confirmar el *journal*, cerrar el handle—. Son milisegundos por
-archivo que el bus USB no puede paralelizar más allá de lo que ya hacen los
-workers.
+When copying development folders (`node_modules`, `.git`, `vendor`), the time is
+**not** spent moving bytes: it goes into creating each file — allocating its MFT
+record, committing the journal, closing the handle. Those are milliseconds per
+file that the USB bus cannot parallelise beyond what the workers already do.
 
-| Escenario | Velocidad típica en USB 3.0 |
+| Scenario | Typical USB 3.0 speed |
 | --- | --- |
-| Archivos grandes (vídeo, ISO, backups) | 100–110 MB/s en HDD; 400+ MB/s en SSD |
-| Miles de archivos pequeños | 5–15 MB/s |
+| Large files (video, ISOs, backups) | 100-110 MB/s on HDD; 400+ MB/s on SSD |
+| Thousands of small files | 5-15 MB/s |
 
-Esa caída es del hardware y del sistema de archivos, no del programa. Si la
-carpeta tiene mucho contenido regenerable (`node_modules`, `bin`, `obj`,
-`target`), copiarla comprimida en un solo archivo suele ser más rápido que
-copiar los archivos sueltos.
+That drop comes from the hardware and the filesystem, not the program. If the
+folder holds a lot of regenerable content (`node_modules`, `bin`, `obj`,
+`target`), copying it as a single compressed archive is often faster than
+copying the loose files.
 
-### 6. Evita que el disco se duerma
+### 6. Stop the drive from sleeping
 
-Windows puede suspender un disco USB durante una copia larga y provocar errores
-intermitentes. En **Opciones de energía → Cambiar configuración avanzada →
-Disco duro**, pon *"Apagar el disco duro tras"* en `0` (nunca) mientras dure la
-copia.
+Windows may suspend a USB drive during a long copy, causing intermittent errors.
+Under **Power Options → Change advanced settings → Hard disk**, set *"Turn off
+hard disk after"* to `0` (never) while the copy runs.
 
 ---
 
-## Qué muestra durante la copia
+## What it shows while copying
 
-Mientras copia, `UltraCopySam` actualiza **una sola línea** cada 250 ms:
+While copying, UltraCopySam refreshes **a single line** every 250 ms:
 
 ```text
-1284 archivos | 3491.84 MB | 812.44 MB/s
+1284 files | 3491.84 MB | 812.44 MB/s
 ```
 
-Al terminar imprime el resumen:
+When it finishes it prints the summary:
 
 ```text
-5327 archivos, 214 directorios, 13137.92 MB en 16.204s (811.55 MB/s)
+5327 files, 214 directories, 13137.92 MB in 16.204s (811.55 MB/s)
 ```
 
-y, si corresponde, cuántas entradas se omitieron y cuántos errores hubo.
+plus, where relevant, how many entries were skipped and how many errors occurred.
 
-Detalles útiles:
+Useful details:
 
-- Los volúmenes se expresan **siempre en MB**, sin escalar a GB. Una unidad fija
-  evita que la cifra salte de unidad a mitad de la copia, que es justo lo que
-  impide comparar de un vistazo si el ritmo sube o baja.
-- El **progreso va a `stderr`** y el **resumen a `stdout`**, de modo que puedes
-  redirigir el resultado a un archivo sin que se llene de líneas parpadeantes.
-- Con `-v` se desactiva la línea de progreso y se imprime cada archivo copiado.
-- Con `-q` no se muestra nada salvo los errores.
-- En copias muy cortas (menos de 250 ms) solo verás el resumen final.
-- El contador **suma cada archivo al completarse**, no mientras se copia. Con un
-  único archivo muy grande la cifra permanece en `0.00 MB` hasta que termina.
-- No se muestra porcentaje ni tiempo restante: calcularlos exigiría recorrer
-  todo el árbol antes de empezar a copiar, lo que retrasa el arranque y
-  contradice el objetivo de máxima velocidad.
-
----
-
-## Comportamiento
-
-- El **destino se crea** si no existe, incluidos todos los directorios
-  intermedios.
-- Los archivos existentes en destino **se sobrescriben siempre**, sin
-  preguntar. Si el archivo de destino tiene el atributo *solo lectura*,
-  *oculto* o *sistema*, se limpia el atributo y se reintenta.
-- **No es un espejo**: lo que ya existía en destino y no está en origen **se
-  conserva**. No se borra nada.
-- Los **enlaces simbólicos y junctions se omiten** por defecto, para evitar
-  ciclos infinitos y copias duplicadas. Se informan en el resumen final. Con
-  `-L` se siguen y se copia su contenido.
-- Un **error en un archivo no aborta la copia**: se reporta por `stderr` y el
-  recorrido continúa. Al final se indica cuántos fallaron y el código de salida
-  es `1`.
-- Se copian los **atributos** del archivo (solo lectura, oculto, etc.) y sus
-  marcas de tiempo, porque `CopyFileExW` lo hace de forma nativa.
-- **No** se copian los permisos NTFS (ACL) ni los flujos de datos alternativos
-  (ADS).
+- Volumes are **always in MB**, never scaled to GB. A fixed unit keeps the
+  number from switching scale mid-copy, which is exactly what makes it hard to
+  tell at a glance whether throughput is rising or falling.
+- **Progress goes to `stderr`** and the **summary to `stdout`**, so you can
+  redirect the result to a file without it filling up with flickering lines.
+- `-v` turns off the progress line and prints every copied file instead.
+- `-q` shows nothing but errors.
+- On very short copies (under 250 ms) you only see the final summary.
+- The counter **adds each file once it completes**, not while it is being
+  copied. With a single very large file the figure stays at `0.00 MB` until it
+  finishes.
+- There is no percentage or ETA: computing them would mean walking the whole
+  tree before copying anything, delaying the start and defeating the point.
 
 ---
 
-## Validaciones
+## Behaviour
 
-Nada se copia hasta que todas estas comprobaciones pasan:
+- The **destination is created** if missing, including intermediate directories.
+- Existing files at the destination are **always overwritten**, without asking.
+  If the destination file is *read-only*, *hidden* or *system*, the attribute is
+  cleared and the copy is retried.
+- **It is not a mirror**: anything already at the destination that is not in the
+  source **is kept**. Nothing is ever deleted.
+- **Symlinks and junctions are skipped** by default, to avoid infinite loops and
+  duplicated copies. They are reported in the final summary. With `-L` they are
+  followed and their contents copied.
+- **An error on one file does not abort the copy**: it is reported on `stderr`
+  and the walk continues. The final count is shown and the exit code is `1`.
+- File **attributes** (read-only, hidden…) and timestamps are copied, because
+  `CopyFileExW` does so natively.
+- NTFS **permissions (ACLs)** and alternate data streams (ADS) are **not**
+  copied.
 
-| Situación | Resultado |
+---
+
+## Validation
+
+Nothing is copied until all of these checks pass:
+
+| Situation | Result |
 | --- | --- |
-| Número de argumentos distinto de 2 | Error indicando cuál falta o cuántos sobran |
-| Argumentos fusionados por una barra final | Error explicando la causa y la solución |
-| Comillas residuales alrededor de la ruta | Se eliminan automáticamente |
-| Ruta vacía o compuesta solo de espacios | Error |
-| Caracteres no válidos en Windows (`< > " \| ? *`, `:` fuera de la letra de unidad, caracteres de control) | Error señalando el carácter concreto |
-| Origen inexistente | Error |
-| Origen es un archivo, no un directorio | Error |
-| Destino existe pero es un archivo | Error |
-| Origen y destino son el mismo directorio | Error |
-| Destino situado dentro del origen | Error: la copia sería recursiva |
+| Argument count other than 2 | Error stating which one is missing or how many are extra |
+| Arguments merged by a trailing backslash | Error explaining the cause and the fix |
+| Leftover quotes around a path | Stripped automatically |
+| Empty or whitespace-only path | Error |
+| Characters Windows forbids (`< > " \| ? *`, `:` outside the drive letter, control characters) | Error pointing at the specific character |
+| Source does not exist | Error |
+| Source is a file, not a directory | Error |
+| Destination exists but is a file | Error |
+| Source and destination are the same directory | Error |
+| Destination sits inside the source | Error: the copy would recurse |
 
-La validación de caracteres respeta la letra de unidad (`D:`), los recursos de
-red (`\\servidor\share`) y el prefijo extendido (`\\?\`).
-
----
-
-## Cómo consigue la velocidad
-
-- **`CopyFileExW`**, la API nativa de Win32. El kernel mueve los bytes de un
-  handle a otro: los datos **no pasan por el espacio de usuario** ni por
-  buffers de Go. Windows aplica internamente doble buffering, E/S asíncrona y
-  preasignación del tamaño del destino para evitar fragmentación.
-- **`COPY_FILE_NO_BUFFERING`** en archivos de 32 MiB o más: evita ensuciar la
-  caché de archivos de Windows con datos de un solo uso. En archivos pequeños la
-  caché sí ayuda, así que ahí no se activa. Si el volumen no soporta el flag
-  —algunos recursos de red—, se reintenta automáticamente sin él.
-- **Pool de workers sobre una cola de trabajo compartida**: recorrer el árbol y
-  copiar ocurren simultáneamente, sin una barrera entre "listar" y "copiar". Se
-  usa una cola explícita en lugar de una goroutine por entrada, para que la
-  memoria no crezca en árboles de millones de archivos.
-- **Rutas extendidas `\\?\`**: además de eliminar el límite de 260 caracteres,
-  evitan el coste de normalización de rutas que Win32 aplica en cada llamada.
-- **Listado sin ordenar** (`ReadDir(-1)`) y tamaños obtenidos del propio
-  `FindFirstFileW`, sin una llamada `stat` adicional por archivo.
-- La cola se recorre en **LIFO**, lo que mejora la localidad al descender por el
-  árbol de directorios.
+Character validation understands drive letters (`D:`), network shares
+(`\\server\share`) and the extended prefix (`\\?\`).
 
 ---
 
-## Elegir el número de workers
+## How it gets its speed
 
-| Escenario | Recomendación |
+- **`CopyFileExW`**, the native Win32 API. The kernel moves bytes from one
+  handle to another: the data **never passes through user space** or Go buffers.
+  Windows internally applies double buffering, asynchronous I/O and destination
+  preallocation to avoid fragmentation.
+- **`COPY_FILE_NO_BUFFERING`** on files of 32 MiB or more: avoids polluting the
+  Windows file cache with single-use data. On small files the cache does help,
+  so it is not enabled there. If the volume rejects the flag — some network
+  shares do — it retries automatically without it.
+- **A worker pool over a shared work queue**: walking the tree and copying
+  happen simultaneously, with no barrier between "list" and "copy". An explicit
+  queue is used instead of one goroutine per entry, so memory does not blow up
+  on trees with millions of files.
+- **Extended `\\?\` paths**: besides removing the 260-character limit, they skip
+  the path-normalisation cost Win32 applies on every call.
+- **Unsorted listing** (`ReadDir(-1)`) with sizes taken from `FindFirstFileW`
+  itself, with no extra `stat` per file.
+- The queue is drained **LIFO**, which improves locality while descending the
+  directory tree.
+
+---
+
+## Choosing the worker count
+
+| Scenario | Recommendation |
 | --- | --- |
-| SSD NVMe interno → SSD NVMe interno | Valor por defecto (`NumCPU * 2`) |
-| SSD interno → SSD externo USB | `-w 8` |
-| Cualquier origen → **HDD externo USB** | `-w 4` (o `-w 2` si el disco castañetea) |
-| HDD mecánico → HDD mecánico | `-w 2` |
-| Recurso de red (SMB) | `-w 8` a `-w 16`: la latencia de red se compensa con paralelismo |
-| Mismo disco físico (origen y destino) | `-w 2`: la cabeza compite consigo misma |
+| Internal NVMe → internal NVMe | Default (`NumCPU * 2`) |
+| Internal SSD → external USB SSD | `-w 8` |
+| Anything → **external USB HDD** | `-w 4` (or `-w 2` if the drive clicks) |
+| Mechanical HDD → mechanical HDD | `-w 2` |
+| Network share (SMB) | `-w 8` to `-w 16`: parallelism hides network latency |
+| Same physical disk on both ends | `-w 2`: the head competes with itself |
 
-Regla general: **más workers solo ayudan si el dispositivo puede atender varias
-operaciones a la vez.** Los discos mecánicos no pueden; los SSD sí.
-
----
-
-## Limitaciones
-
-- **Solo Windows.** Depende de la API de Win32; no compila en Linux ni macOS.
-- **No es un espejo.** No borra en destino lo que ya no está en origen.
-- **No reanuda archivos parciales.** Si una copia se interrumpe, el archivo que
-  estaba en curso se vuelve a copiar completo en la siguiente pasada (con `-u`,
-  los que sí terminaron se saltan).
-- **La comparación de `-u` es por tamaño y fecha**, no por contenido. Ver
-  [Copias incrementales](#copias-incrementales).
-- **No copia ACL ni flujos alternativos (ADS).** Si necesitas preservar
-  permisos NTFS, usa `robocopy /COPYALL`.
-- **No admite filtros** por extensión, patrón ni fecha.
+Rule of thumb: **more workers only help if the device can serve several
+operations at once.** Mechanical drives cannot; SSDs can.
 
 ---
 
-## Compilación
+## Limitations
 
-Requiere Go 1.21 o superior.
+- **Windows only.** It depends on the Win32 API; it does not build on Linux or
+  macOS.
+- **Not a mirror.** It never deletes destination files that are gone from the
+  source.
+- **No partial-file resume.** If a copy is interrupted, the file in flight is
+  copied again in full next time (with `-u`, the ones that did finish are
+  skipped).
+- **`-u` compares size and timestamp**, not content. See
+  [Incremental copies](#incremental-copies).
+- **No ACL or alternate data stream copying.** If you need NTFS permissions
+  preserved, use `robocopy /COPYALL`.
+- **No filters** by extension, pattern or date.
+
+---
+
+## Building
+
+Requires Go 1.21 or newer.
 
 ```powershell
 go build -trimpath -ldflags "-s -w" -o UltraCopySam.exe .
 ```
 
-- `-trimpath` elimina las rutas de compilación del binario.
-- `-ldflags "-s -w"` quita la tabla de símbolos y la información de depuración,
-  reduciendo el tamaño del ejecutable.
+- `-trimpath` strips build paths from the binary.
+- `-ldflags "-s -w"` drops the symbol table and debug info, shrinking the
+  executable.
 
-El resultado es un binario autocontenido de menos de 2 MB, sin dependencias
-externas más allá de `kernel32.dll`, que forma parte de Windows.
+The result is a self-contained binary under 2 MB, with no external dependencies
+beyond `kernel32.dll`, which is part of Windows.
 
-Verificación estática:
+Static checks:
 
 ```powershell
 go vet ./...
@@ -720,33 +768,34 @@ go vet ./...
 
 ---
 
-## Estructura del código
+## Code layout
 
-| Archivo | Contenido |
+| File | Contents |
 | --- | --- |
-| `install.ps1` | Instalador y desinstalador para PowerShell |
-| `main.go` | Interfaz de línea de comandos, línea de progreso y resumen final |
-| `args.go` | Saneamiento de argumentos y validación de rutas |
-| `copier.go` | Motor de copia: pool de workers, recorrido y estadísticas |
-| `queue.go` | Cola de trabajo concurrente con contador de pendientes |
-| `winapi.go` | Enlaces directos a `kernel32.dll` (`CopyFileExW`, `CreateDirectoryW`, atributos) |
-| `path.go` | Conversión a rutas extendidas `\\?\` |
+| `main.go` | Command-line interface, progress line and final summary |
+| `args.go` | Argument sanitising and path validation |
+| `copier.go` | Copy engine: worker pool, tree walk, `-u` logic and stats |
+| `queue.go` | Concurrent work queue with a pending counter |
+| `winapi.go` | Direct bindings to `kernel32.dll` (`CopyFileExW`, `CreateDirectoryW`, attributes, volume info) |
+| `path.go` | Conversion to extended `\\?\` paths |
+| `install.ps1` | PowerShell installer and uninstaller |
+| `bench/bench.ps1` | Benchmark script used for the numbers above |
 
-Todos los archivos llevan la etiqueta de compilación `//go:build windows`.
+Every Go file carries the `//go:build windows` build tag.
 
 ---
 
-## Licencia
+## License
 
-**[BSD Zero Clause License (0BSD)](LICENSE)** — la licencia más permisiva que
-existe.
+**[BSD Zero Clause License (0BSD)](LICENSE)** — the most permissive license
+there is.
 
-Puedes usar, copiar, modificar, redistribuir y vender este software, con o sin
-fines comerciales, sin ninguna condición: **ni siquiera se exige conservar el
-aviso de copyright ni mencionar al autor**. Es equivalente a ponerlo en el
-dominio público, pero redactado como licencia para que sea válida en cualquier
-jurisdicción.
+You may use, copy, modify, redistribute and sell this software, commercially or
+not, with no conditions whatsoever: **you are not even required to keep the
+copyright notice or credit the author**. It is equivalent to placing it in the
+public domain, but worded as a license so that it holds up in every
+jurisdiction.
 
-Lo único que hace la licencia es lo que toda licencia de software libre debe
-hacer: dejar claro que el software se entrega **tal cual**, sin garantías, y
-que el autor no responde por los daños que su uso pueda ocasionar.
+The only thing the license does is what every open-source license must: make
+clear that the software is provided **as is**, without warranty, and that the
+author is not liable for any damage its use may cause.

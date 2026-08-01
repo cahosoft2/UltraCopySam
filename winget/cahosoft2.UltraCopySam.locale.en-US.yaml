@@ -1,0 +1,48 @@
+# yaml-language-server: $schema=https://aka.ms/winget-manifest.defaultLocale.1.6.0.schema.json
+PackageIdentifier: cahosoft2.UltraCopySam
+PackageVersion: 0.0.2
+PackageLocale: en-US
+Publisher: Cristian Alfonso Hoyo Ozuna
+PublisherUrl: https://github.com/cahosoft2
+PublisherSupportUrl: https://github.com/cahosoft2/UltraCopySam/issues
+PackageName: UltraCopySam
+PackageUrl: https://github.com/cahosoft2/UltraCopySam
+License: 0BSD
+LicenseUrl: https://github.com/cahosoft2/UltraCopySam/blob/main/LICENSE
+Copyright: Copyright (c) 2026 Cristian Alfonso Hoyo Ozuna
+ShortDescription: Fast low-level directory copy tool for Windows, powered by the native CopyFileExW API.
+Description: |-
+  UltraCopySam copies an entire directory tree to another location, overwriting
+  whatever is there without asking, as fast as the hardware allows.
+
+  It calls the native Win32 API directly, so the Windows kernel moves the bytes
+  and they never pass through the program's buffers. A worker pool walks the
+  tree and copies at the same time, with no barrier between listing and copying.
+
+  Features:
+  - Low-level copying through CopyFileExW, with unbuffered I/O for large files.
+  - True parallelism with a configurable worker count.
+  - Incremental mode (-u) that skips files whose size and timestamp already
+    match at the destination.
+  - Support for paths longer than 260 characters via the \\?\ extended prefix.
+  - Fault tolerant: a locked file does not abort the copy.
+  - Clear, explanatory error messages instead of numeric codes.
+  - A single executable with no dependencies.
+Moniker: ultracopysam
+Tags:
+  - backup
+  - cli
+  - command-line
+  - copy
+  - file-copy
+  - files
+  - incremental
+  - ntfs
+  - robocopy
+  - sync
+ReleaseNotesUrl: https://github.com/cahosoft2/UltraCopySam/releases/tag/v0.0.2
+Documentations:
+  - DocumentLabel: README
+    DocumentUrl: https://github.com/cahosoft2/UltraCopySam#readme
+ManifestType: defaultLocale
+ManifestVersion: 1.6.0

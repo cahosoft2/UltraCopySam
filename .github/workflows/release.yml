@@ -1,0 +1,106 @@
+name: Release
+
+# Al empujar una etiqueta vX.Y.Z se compila el binario en los servidores de
+# GitHub y se publica como release. Que la compilación sea pública y trazable
+# importa especialmente en un .exe sin firmar: cualquiera puede comprobar de qué
+# commit salió el binario que descarga.
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Etiqueta a publicar (por ejemplo v0.0.3)'
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Build and publish
+    runs-on: windows-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: 'stable'
+          cache: true
+
+      - name: Resolve version
+        id: version
+        shell: pwsh
+        run: |
+          $tag = if ('${{ github.event_name }}' -eq 'workflow_dispatch') {
+            '${{ github.event.inputs.tag }}'
+          } else {
+            '${{ github.ref_name }}'
+          }
+          # v0.0.3 -> V003, que es la convención de nombre de los binarios.
+          if ($tag -match '^v(\d+)\.(\d+)\.(\d+)$') {
+            $sufijo = 'V{0}{1}{2}' -f $Matches[1], $Matches[2], $Matches[3]
+          } else {
+            $sufijo = $tag -replace '[^A-Za-z0-9]', ''
+          }
+          "tag=$tag"                                  >> $env:GITHUB_OUTPUT
+          "asset=UltraCopySam$sufijo.exe"             >> $env:GITHUB_OUTPUT
+          Write-Host "Etiqueta $tag -> UltraCopySam$sufijo.exe"
+
+      - name: go vet
+        run: go vet ./...
+
+      - name: Build
+        run: go build -trimpath -ldflags "-s -w" -o "${{ steps.version.outputs.asset }}" .
+
+      - name: Compute SHA256
+        id: hash
+        shell: pwsh
+        run: |
+          $h = (Get-FileHash "${{ steps.version.outputs.asset }}" -Algorithm SHA256).Hash
+          "sha256=$h" >> $env:GITHUB_OUTPUT
+          Write-Host "SHA256: $h"
+
+      - name: Publish release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $notas = @"
+          ## Download
+
+          ``${{ steps.version.outputs.asset }}`` — Windows 64-bit, no installer, no dependencies.
+
+          SHA256:
+
+          ``````text
+          ${{ steps.hash.outputs.sha256 }}
+          ``````
+
+          Built automatically from commit ``${{ github.sha }}`` by GitHub Actions.
+
+          ## Install
+
+          ``````powershell
+          irm https://raw.githubusercontent.com/${{ github.repository }}/main/install.ps1 | iex
+          ``````
+
+          After a manual download, unblock the file so SmartScreen stays out of the way:
+
+          ``````powershell
+          Unblock-File .\${{ steps.version.outputs.asset }}
+          ``````
+
+          See the [README](https://github.com/${{ github.repository }}#readme) for full documentation.
+          "@
+
+          $notas | Out-File -Encoding utf8 notas.md
+
+          gh release create "${{ steps.version.outputs.tag }}" `
+            "${{ steps.version.outputs.asset }}" `
+            --title "UltraCopySam ${{ steps.version.outputs.tag }}" `
+            --notes-file notas.md

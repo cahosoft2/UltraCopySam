@@ -85,8 +85,8 @@ func main() {
 	if !*quiet {
 		fmt.Fprintf(os.Stderr, "\r%s\r", strings.Repeat(" ", 78))
 		fmt.Printf("%d archivos, %d directorios, %s en %s (%s/s)\n",
-			c.st.files.Load(), c.st.dirs.Load(), humanBytes(c.st.bytes.Load()),
-			elapsed.Round(time.Millisecond), humanBytes(rate(c.st.bytes.Load(), elapsed)))
+			c.st.files.Load(), c.st.dirs.Load(), megaBytes(c.st.bytes.Load()),
+			elapsed.Round(time.Millisecond), megaBytes(rate(c.st.bytes.Load(), elapsed)))
 		if n := c.st.skipped.Load(); n > 0 {
 			fmt.Printf("%d entradas omitidas (enlaces/junctions)\n", n)
 		}
@@ -114,7 +114,7 @@ func startProgress(c *copier, start time.Time) chan struct{} {
 				b := c.st.bytes.Load()
 				fmt.Fprintf(os.Stderr, "\r%-77s",
 					fmt.Sprintf("%d archivos | %s | %s/s",
-						c.st.files.Load(), humanBytes(b), humanBytes(rate(b, time.Since(start)))))
+						c.st.files.Load(), megaBytes(b), megaBytes(rate(b, time.Since(start)))))
 			}
 		}
 	}()
@@ -152,17 +152,11 @@ func rate(bytes int64, d time.Duration) int64 {
 	return int64(float64(bytes) / d.Seconds())
 }
 
-func humanBytes(n int64) string {
-	const unit = 1024
-	if n < unit {
-		return fmt.Sprintf("%d B", n)
-	}
-	div, exp := int64(unit), 0
-	for v := n / unit; v >= unit; v /= unit {
-		div *= unit
-		exp++
-	}
-	return fmt.Sprintf("%.2f %cB", float64(n)/float64(div), "KMGTPE"[exp])
+// megaBytes formatea siempre en MB, sin escalar a GB. Mantener una unidad fija
+// evita que la cifra del progreso salte de unidad mientras avanza la copia, que
+// es lo que hace difícil comparar de un vistazo si va más rápido o más lento.
+func megaBytes(n int64) string {
+	return fmt.Sprintf("%.2f MB", float64(n)/(1024*1024))
 }
 
 func fatal(format string, args ...any) {

@@ -13,7 +13,7 @@ UltraCopySam.exe "D:\proyectos" "E:\backup\proyectos"
 ```
 
 ```text
-1284 archivos | 3.41 GB | 812.44 MB/s
+1284 archivos | 3491.84 MB | 812.44 MB/s
 ```
 
 ---
@@ -57,7 +57,7 @@ Get-FileHash UltraCopySamV001.exe -Algorithm SHA256
 ```
 
 ```text
-1FF856EBE938BC3FD6F49B72FD14F8BDF9130FAAFE4CE45F355A76EC0C114FC1
+CBD92EBEF7F081DCA822CD4A9E1E1750F70036F699F4BB538BB572F3304E6FA6
 ```
 
 > [!NOTE]
@@ -508,24 +508,29 @@ copia.
 Mientras copia, `UltraCopySam` actualiza **una sola línea** cada 250 ms:
 
 ```text
-1284 archivos | 3.41 GB | 812.44 MB/s
+1284 archivos | 3491.84 MB | 812.44 MB/s
 ```
 
 Al terminar imprime el resumen:
 
 ```text
-5327 archivos, 214 directorios, 12.83 GB en 16.204s (811.55 MB/s)
+5327 archivos, 214 directorios, 13137.92 MB en 16.204s (811.55 MB/s)
 ```
 
 y, si corresponde, cuántas entradas se omitieron y cuántos errores hubo.
 
 Detalles útiles:
 
+- Los volúmenes se expresan **siempre en MB**, sin escalar a GB. Una unidad fija
+  evita que la cifra salte de unidad a mitad de la copia, que es justo lo que
+  impide comparar de un vistazo si el ritmo sube o baja.
 - El **progreso va a `stderr`** y el **resumen a `stdout`**, de modo que puedes
   redirigir el resultado a un archivo sin que se llene de líneas parpadeantes.
 - Con `-v` se desactiva la línea de progreso y se imprime cada archivo copiado.
 - Con `-q` no se muestra nada salvo los errores.
 - En copias muy cortas (menos de 250 ms) solo verás el resumen final.
+- El contador **suma cada archivo al completarse**, no mientras se copia. Con un
+  único archivo muy grande la cifra permanece en `0.00 MB` hasta que termina.
 - No se muestra porcentaje ni tiempo restante: calcularlos exigiría recorrer
   todo el árbol antes de empezar a copiar, lo que retrasa el arranque y
   contradice el objetivo de máxima velocidad.

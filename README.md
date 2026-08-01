@@ -440,12 +440,13 @@ timestamps to that granularity. The filesystem is detected automatically.
 ## Benchmarks vs robocopy
 
 Honest numbers, including where UltraCopySam loses. Measured on a single NVMe
-SSD, median of 3 runs, destination wiped before each run, against
-`robocopy /E /MT` (its multi-threaded mode).
+SSD, destination wiped before every run, against `robocopy /E /MT` (its
+multi-threaded mode). Median of 3 runs, except the small-file scenario, which
+uses 7 alternating runs because that is where the two tools are closest.
 
 | Scenario | robocopy `/MT` | UltraCopySam | Winner |
 | --- | --- | --- | --- |
-| 20,000 small files (7.6 MB) | **10.22 s** | 12.86 s | robocopy, by 20% |
+| 20,000 small files (7.6 MB) | **10.56 s** | 12.77 s | robocopy, by 21% |
 | 8 large files (2,000 MB) | 1.49 s | **0.92 s** | UltraCopySam, **1.6× faster** |
 | Mixed: 5,006 files (734 MB) | **2.74 s** | 3.41 s | robocopy, by 20% |
 | Second pass, nothing changed | 0.03 s | 0.03 s | Tie |
@@ -454,12 +455,25 @@ SSD, median of 3 runs, destination wiped before each run, against
 
 - With **large files** UltraCopySam is clearly ahead, thanks to
   `COPY_FILE_NO_BUFFERING` on files of 32 MiB or more.
-- With **many small files** robocopy wins by about 20%. The bottleneck is
-  entirely per-file: the same 20,000-file walk takes **0.04 s** in `-u` mode,
-  which proves the tree walk and the work queue are not the limit —
-  `CopyFileExW` itself is.
+- With **many small files** robocopy wins by about 21%. The result is
+  consistent: across 7 alternating runs the ranges do not even overlap
+  (robocopy 10.08-11.29 s, UltraCopySam 11.73-13.21 s).
 - For **repeated backups** both are equally fast, because neither rewrites what
   has not changed.
+
+**Where the small-file gap does *not* come from.** Three hypotheses were tested
+with a standalone prototype and all three were ruled out:
+
+| Hypothesis | Result |
+| --- | --- |
+| `CopyFileExW` is too heavy for small files; manual `ReadFile`/`WriteFile` would be faster | **Ruled out** — the two are within 0.5% of each other |
+| The `\\?\` extended paths cost extra | **Ruled out** — they are marginally *faster* |
+| The `sync.Cond` work queue is slower than a Go channel | **Ruled out** — the queue actually beat the channel |
+
+The per-file cost is not in the tree walk either: walking the same 20,000 files
+in `-u` mode takes **0.04 s**. The exact cause of the remaining gap has not been
+identified yet, and it would take real profiling to pin down. It is documented
+here rather than hidden.
 
 Reproduce them yourself with the script in
 [bench/bench.ps1](bench/bench.ps1).

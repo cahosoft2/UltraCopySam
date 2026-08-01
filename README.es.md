@@ -447,12 +447,14 @@ jamás. El sistema de archivos se detecta automáticamente.
 ## Comparativa con robocopy
 
 Cifras honestas, incluyendo dónde UltraCopySam pierde. Medido sobre un único SSD
-NVMe, mediana de 3 corridas, con el destino borrado antes de cada una, frente a
-`robocopy /E /MT` (su modo multihilo).
+NVMe, con el destino borrado antes de cada corrida, frente a `robocopy /E /MT`
+(su modo multihilo). Mediana de 3 corridas, salvo el escenario de archivos
+pequeños, que usa 7 corridas alternadas por ser donde ambas herramientas están
+más igualadas.
 
 | Escenario | robocopy `/MT` | UltraCopySam | Ganador |
 | --- | --- | --- | --- |
-| 20.000 archivos pequeños (7,6 MB) | **10,22 s** | 12,86 s | robocopy, por un 20% |
+| 20.000 archivos pequeños (7,6 MB) | **10,56 s** | 12,77 s | robocopy, por un 21% |
 | 8 archivos grandes (2.000 MB) | 1,49 s | **0,92 s** | UltraCopySam, **1,6× más rápido** |
 | Mixto: 5.006 archivos (734 MB) | **2,74 s** | 3,41 s | robocopy, por un 20% |
 | Segunda pasada, sin cambios | 0,03 s | 0,03 s | Empate |
@@ -461,12 +463,25 @@ NVMe, mediana de 3 corridas, con el destino borrado antes de cada una, frente a
 
 - Con **archivos grandes** UltraCopySam gana con claridad, gracias a
   `COPY_FILE_NO_BUFFERING` en archivos de 32 MiB o más.
-- Con **muchos archivos pequeños** robocopy gana por un 20%. El cuello de
-  botella está por completo en el coste por archivo: recorrer esos mismos 20.000
-  archivos en modo `-u` toma **0,04 s**, lo que demuestra que ni el recorrido ni
-  la cola de trabajo son el límite, sino `CopyFileExW`.
+- Con **muchos archivos pequeños** robocopy gana por un 21%. El resultado es
+  consistente: en 7 corridas alternadas los rangos ni siquiera se solapan
+  (robocopy 10,08-11,29 s; UltraCopySam 11,73-13,21 s).
 - En **respaldos repetidos** ambos empatan, porque ninguno reescribe lo que no
   ha cambiado.
+
+**De dónde *no* viene esa diferencia.** Se probaron tres hipótesis con un
+prototipo aparte y las tres quedaron descartadas:
+
+| Hipótesis | Resultado |
+| --- | --- |
+| `CopyFileExW` pesa demasiado en archivos pequeños; con `ReadFile`/`WriteFile` manual sería más rápido | **Descartada**: quedan a un 0,5% una de otra |
+| Las rutas extendidas `\\?\` cuestan más | **Descartada**: son ligeramente *más* rápidas |
+| La cola con `sync.Cond` es más lenta que un channel de Go | **Descartada**: la cola resultó más rápida que el channel |
+
+El coste por archivo tampoco está en el recorrido: recorrer esos mismos 20.000
+archivos en modo `-u` toma **0,04 s**. La causa exacta de la diferencia restante
+aún no está identificada y haría falta un *profiling* real para localizarla. Se
+documenta aquí en lugar de ocultarse.
 
 Puedes reproducirlas con el script de [bench/bench.ps1](bench/bench.ps1).
 

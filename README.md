@@ -165,8 +165,73 @@ Las alternativas que existen, por si el proyecto crece:
 
 ## Instalación
 
-Descarga `UltraCopySam.exe` o compílalo (ver [Compilación](#compilación)) y
-colócalo donde prefieras.
+### Instalación automática (recomendada)
+
+Ejecuta esto en PowerShell y listo:
+
+```powershell
+irm https://raw.githubusercontent.com/cahosoft2/UltraCopySam/main/install.ps1 | iex
+```
+
+El instalador se encarga de todo:
+
+1. Descarga la última versión desde GitHub Releases.
+2. Muestra su huella SHA256 para que puedas verificarla.
+3. La instala en `%LOCALAPPDATA%\Programs\UltraCopySam`.
+4. La **desbloquea** para que SmartScreen no interfiera (`Unblock-File`).
+5. La agrega al `PATH` del usuario.
+6. Comprueba que el ejecutable responde.
+
+**No requiere permisos de administrador**: todo queda en tu perfil de usuario.
+Abre una terminal nueva al terminar para que el `PATH` surta efecto.
+
+> [!TIP]
+> Si prefieres revisar el script antes de ejecutarlo —buena costumbre con
+> cualquier instalador de internet—, ábrelo primero:
+> [install.ps1](install.ps1). También puedes descargarlo y ejecutarlo aparte:
+>
+> ```powershell
+> irm https://raw.githubusercontent.com/cahosoft2/UltraCopySam/main/install.ps1 -OutFile install.ps1
+> notepad install.ps1
+> .\install.ps1
+> ```
+
+#### Opciones del instalador
+
+| Parámetro | Descripción |
+| --- | --- |
+| `-Version v0.0.1` | Instala una versión concreta en lugar de la última |
+| `-InstallDir "D:\herramientas"` | Cambia la carpeta de instalación |
+| `-FromFile ".\UltraCopySam.exe"` | Instala desde un archivo local, sin descargar |
+| `-NoPath` | No modifica el `PATH` |
+| `-Uninstall` | Desinstala: borra la carpeta y limpia el `PATH` |
+
+```powershell
+# Instalar en otra carpeta, sin tocar el PATH
+.\install.ps1 -InstallDir "D:\herramientas\UltraCopySam" -NoPath
+
+# Desinstalar
+.\install.ps1 -Uninstall
+```
+
+> [!NOTE]
+> Si PowerShell bloquea la ejecución del script por su directiva de
+> ejecución, ejecútalo así (afecta solo a ese proceso, no cambia la
+> configuración de tu sistema):
+>
+> ```powershell
+> powershell -ExecutionPolicy Bypass -File .\install.ps1
+> ```
+
+### Instalación manual
+
+Descarga `UltraCopySam.exe` de [Releases](https://github.com/cahosoft2/UltraCopySam/releases)
+o compílalo (ver [Compilación](#compilación)), desbloquéalo y colócalo donde
+prefieras:
+
+```powershell
+Unblock-File .\UltraCopySamV001.exe
+```
 
 Para poder invocarlo como `UltraCopySam` desde cualquier carpeta, añade su
 directorio al `PATH`:
@@ -174,12 +239,13 @@ directorio al `PATH`:
 ```powershell
 # Solo para la sesión actual
 $env:PATH += ";D:\herramientas\UltraCopySam"
+```
 
-# Permanente, para el usuario actual
-[Environment]::SetEnvironmentVariable(
-    "PATH",
-    [Environment]::GetEnvironmentVariable("PATH", "User") + ";D:\herramientas\UltraCopySam",
-    "User")
+Para hacerlo permanente, lo más seguro es usar el instalador con `-FromFile`,
+que escribe el `PATH` sin alterar las variables que contenga:
+
+```powershell
+.\install.ps1 -FromFile ".\UltraCopySamV001.exe" -InstallDir "D:\herramientas\UltraCopySam"
 ```
 
 Sin añadirlo al `PATH` hay que invocarlo por su ruta completa, o con `.\` si
@@ -590,6 +656,7 @@ go vet ./...
 
 | Archivo | Contenido |
 | --- | --- |
+| `install.ps1` | Instalador y desinstalador para PowerShell |
 | `main.go` | Interfaz de línea de comandos, línea de progreso y resumen final |
 | `args.go` | Saneamiento de argumentos y validación de rutas |
 | `copier.go` | Motor de copia: pool de workers, recorrido y estadísticas |

@@ -8,23 +8,27 @@ pueda instalarse con:
 winget install cahosoft2.UltraCopySam
 ```
 
+Los tres manifiestos viven en `manifests/`, aislados de este documento:
+`winget validate` intenta interpretar como YAML **todos** los archivos de la
+carpeta que se le indica, y un `.md` la haría fallar.
+
 | Archivo | Contenido |
 | --- | --- |
-| `cahosoft2.UltraCopySam.yaml` | Manifiesto de versión |
-| `cahosoft2.UltraCopySam.locale.en-US.yaml` | Metadatos: descripción, licencia, etiquetas |
-| `cahosoft2.UltraCopySam.installer.yaml` | URL de descarga, arquitectura y SHA256 |
+| `manifests/cahosoft2.UltraCopySam.yaml` | Manifiesto de versión |
+| `manifests/cahosoft2.UltraCopySam.locale.en-US.yaml` | Metadatos: descripción, licencia, etiquetas |
+| `manifests/cahosoft2.UltraCopySam.installer.yaml` | URL de descarga, arquitectura y SHA256 |
 
 ## Validar antes de enviar
 
 ```powershell
-winget validate --manifest .\winget
+winget validate --manifest .\winget\manifests
 ```
 
 ## Enviarlos a Microsoft
 
 1. Haz un *fork* de [microsoft/winget-pkgs](https://github.com/microsoft/winget-pkgs).
-2. Copia los tres YAML a
-   `manifests/c/cahosoft2/UltraCopySam/<versión>/`.
+2. Copia los tres YAML de `manifests/` a
+   `manifests/c/cahosoft2/UltraCopySam/<versión>/` dentro de ese repositorio.
 3. Abre un *pull request*. La validación automática comprueba el hash, descarga
    el binario y lo analiza con varios antivirus.
 

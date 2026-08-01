@@ -1,6 +1,6 @@
 # yaml-language-server: $schema=https://aka.ms/winget-manifest.defaultLocale.1.6.0.schema.json
 PackageIdentifier: cahosoft2.UltraCopySam
-PackageVersion: 0.0.2
+PackageVersion: 0.0.3
 PackageLocale: en-US
 Publisher: Cristian Alfonso Hoyo Ozuna
 PublisherUrl: https://github.com/cahosoft2
@@ -40,7 +40,7 @@ Tags:
   - ntfs
   - robocopy
   - sync
-ReleaseNotesUrl: https://github.com/cahosoft2/UltraCopySam/releases/tag/v0.0.2
+ReleaseNotesUrl: https://github.com/cahosoft2/UltraCopySam/releases/tag/v0.0.3
 Documentations:
   - DocumentLabel: README
     DocumentUrl: https://github.com/cahosoft2/UltraCopySam#readme

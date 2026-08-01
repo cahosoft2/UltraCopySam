@@ -58,17 +58,17 @@ Get the latest build from the
 **[Releases page](https://github.com/cahosoft2/UltraCopySam/releases)**, or
 directly:
 
-**[⬇ UltraCopySamV002.exe](https://github.com/cahosoft2/UltraCopySam/releases/download/v0.0.2/UltraCopySamV002.exe)**
+**[⬇ UltraCopySamV003.exe](https://github.com/cahosoft2/UltraCopySam/releases/download/v0.0.3/UltraCopySamV003.exe)**
 — Windows 64-bit · 1.91 MB · no installer, no dependencies
 
 Verify the download against its SHA256 hash:
 
 ```powershell
-Get-FileHash UltraCopySamV002.exe -Algorithm SHA256
+Get-FileHash UltraCopySamV003.exe -Algorithm SHA256
 ```
 
 ```text
-E22891936853ECBB3EB244669AFAA16232BFBE78B3E8247764E7630E05D233B6
+04346BB90E1DC6D52D1E55890B4CBC74E8C1760CCB6BD8867B29734FFBC18DDB
 ```
 
 > [!NOTE]
@@ -96,7 +96,7 @@ When you download any file, Windows attaches an invisible marker called the
 *Mark of the Web* that means "this came from the internet". Just remove it:
 
 ```powershell
-Unblock-File .\UltraCopySamV002.exe
+Unblock-File .\UltraCopySamV003.exe
 ```
 
 From then on the program runs normally, with no further warnings.
@@ -157,8 +157,10 @@ The available routes, should the project grow:
 
 - **Low-level copying** via `CopyFileExW`: the kernel transfers data from one
   handle to another without going through user space.
-- **True parallelism**: a worker pool walks the tree and copies at the same
+- **True parallelism**: separate worker pools walk the tree and copy at the same
   time, without waiting for the listing to finish before copying starts.
+- **Bounded memory**: peak usage stays flat no matter how large the tree —
+  measured at 16 MB for both 20,000 and 300,000 files.
 - **Always overwrites**, no confirmations — even if the destination file is
   marked *read-only*, *hidden* or *system*.
 - **Incremental mode** (`-u`): skips files whose size and timestamp already
@@ -209,7 +211,7 @@ Open a new terminal afterwards so the `PATH` change takes effect.
 
 | Parameter | Description |
 | --- | --- |
-| `-Version v0.0.2` | Install a specific version instead of the latest |
+| `-Version v0.0.3` | Install a specific version instead of the latest |
 | `-InstallDir "D:\tools"` | Change the install folder |
 | `-FromFile ".\UltraCopySam.exe"` | Install from a local file, no download |
 | `-NoPath` | Do not modify `PATH` |
@@ -238,7 +240,7 @@ Download `UltraCopySam.exe` from
 [Building](#building)), unblock it and put it wherever you like:
 
 ```powershell
-Unblock-File .\UltraCopySamV002.exe
+Unblock-File .\UltraCopySamV003.exe
 ```
 
 To call it as `UltraCopySam` from any folder, add its directory to `PATH`:
@@ -252,7 +254,7 @@ To make it permanent, the safest route is the installer with `-FromFile`, which
 writes `PATH` without expanding any variables it may contain:
 
 ```powershell
-.\install.ps1 -FromFile ".\UltraCopySamV002.exe" -InstallDir "D:\tools\UltraCopySam"
+.\install.ps1 -FromFile ".\UltraCopySamV003.exe" -InstallDir "D:\tools\UltraCopySam"
 ```
 
 Without it on the `PATH` you must call it by full path, or with `.\` when you
@@ -309,6 +311,7 @@ D:\dev\old\project\x.txt   ->   E:\backup\old\project\x.txt
 | `-v` | List every copied file instead of showing the progress line. |
 | `-q` | Quiet: no progress, no summary (errors are still shown). |
 | `-L` | Follow symbolic links and junctions. Skipped by default. |
+| `-cola N` | Files that may sit queued, 4,096 by default. This is what bounds memory use; you rarely need to touch it. |
 
 > [!IMPORTANT]
 > Options go **before** the paths. `UltraCopySam -u "D:\a" "E:\b"` works;
@@ -446,34 +449,37 @@ uses 7 alternating runs because that is where the two tools are closest.
 
 | Scenario | robocopy `/MT` | UltraCopySam | Winner |
 | --- | --- | --- | --- |
-| 20,000 small files (7.6 MB) | **10.56 s** | 12.77 s | robocopy, by 21% |
-| 8 large files (2,000 MB) | 1.49 s | **0.92 s** | UltraCopySam, **1.6× faster** |
-| Mixed: 5,006 files (734 MB) | **2.74 s** | 3.41 s | robocopy, by 20% |
-| Second pass, nothing changed | 0.03 s | 0.03 s | Tie |
+| 20,000 small files (7.6 MB) | 10.70 s | **10.44 s** | Tie (within noise) |
+| 8 large files (2,000 MB) | 1.44 s | **0.87 s** | UltraCopySam, **1.65× faster** |
+| Mixed: 5,006 files (734 MB) | **2.90 s** | 3.17 s | robocopy, by 9% |
+| Second pass, nothing changed | 0.03 s | 0.02 s | Tie |
 
 **Reading the results:**
 
 - With **large files** UltraCopySam is clearly ahead, thanks to
   `COPY_FILE_NO_BUFFERING` on files of 32 MiB or more.
-- With **many small files** robocopy wins by about 21%. The result is
-  consistent: across 7 alternating runs the ranges do not even overlap
-  (robocopy 10.08-11.29 s, UltraCopySam 11.73-13.21 s).
+- With **many small files** the two are level. Across 7 alternating runs the
+  medians land 2.4% apart, which is well inside the run-to-run noise.
 - For **repeated backups** both are equally fast, because neither rewrites what
   has not changed.
 
-**Where the small-file gap does *not* come from.** Three hypotheses were tested
-with a standalone prototype and all three were ruled out:
+### How the small-file gap was closed
+
+Version 0.0.2 was **21% slower** than robocopy on small files. Three plausible
+explanations were tested with a standalone prototype, and all three turned out
+to be wrong:
 
 | Hypothesis | Result |
 | --- | --- |
-| `CopyFileExW` is too heavy for small files; manual `ReadFile`/`WriteFile` would be faster | **Ruled out** — the two are within 0.5% of each other |
-| The `\\?\` extended paths cost extra | **Ruled out** — they are marginally *faster* |
-| The `sync.Cond` work queue is slower than a Go channel | **Ruled out** — the queue actually beat the channel |
+| `CopyFileExW` is too heavy for small files; manual `ReadFile`/`WriteFile` would be faster | **Wrong** — within 0.5% of each other |
+| The `\\?\` extended paths cost extra | **Wrong** — marginally *faster* |
+| The `sync.Cond` work queue is slower than a Go channel | **Wrong** — the queue beat the channel |
 
-The per-file cost is not in the tree walk either: walking the same 20,000 files
-in `-u` mode takes **0.04 s**. The exact cause of the remaining gap has not been
-identified yet, and it would take real profiling to pin down. It is documented
-here rather than hidden.
+The real cause turned up while fixing something else entirely: a single worker
+pool handled **both** walking and copying, so a worker busy listing a directory
+was a worker not copying. Splitting them into two pools — 4 walkers and `-w`
+copiers — closed the gap and **halved the time on large trees** (300,000 files:
+127 s → 60 s).
 
 Reproduce them yourself with the script in
 [bench/bench.ps1](bench/bench.ps1).
@@ -713,10 +719,15 @@ Character validation understands drive letters (`D:`), network shares
   Windows file cache with single-use data. On small files the cache does help,
   so it is not enabled there. If the volume rejects the flag — some network
   shares do — it retries automatically without it.
-- **A worker pool over a shared work queue**: walking the tree and copying
-  happen simultaneously, with no barrier between "list" and "copy". An explicit
-  queue is used instead of one goroutine per entry, so memory does not blow up
-  on trees with millions of files.
+- **Two separate worker pools**: 4 workers walk the tree while `-w` workers
+  copy, each on its own queue. Walking and copying overlap completely, and a
+  worker listing a directory is never a worker that could have been copying.
+- **Bounded memory**: the file queue holds at most `-cola` entries (4,096 by
+  default), so the walk — which is ~300× faster than copying — cannot run ahead
+  and pile up the whole tree in RAM. Queue entries store only the file name plus
+  a pointer to a shared parent folder, so path text is stored once per directory
+  instead of once per file. Peak memory stays flat regardless of tree size:
+  **16 MB for both 20,000 and 300,000 files**.
 - **Extended `\\?\` paths**: besides removing the 260-character limit, they skip
   the path-normalisation cost Win32 applies on every call.
 - **Unsorted listing** (`ReadDir(-1)`) with sizes taken from `FindFirstFileW`
@@ -788,8 +799,8 @@ go vet ./...
 | --- | --- |
 | `main.go` | Command-line interface, progress line and final summary |
 | `args.go` | Argument sanitising and path validation |
-| `copier.go` | Copy engine: worker pool, tree walk, `-u` logic and stats |
-| `queue.go` | Concurrent work queue with a pending counter |
+| `copier.go` | Copy engine: the two worker pools, tree walk, `-u` logic and stats |
+| `queue.go` | Directory queue and the shared-parent job type that bounds memory |
 | `winapi.go` | Direct bindings to `kernel32.dll` (`CopyFileExW`, `CreateDirectoryW`, attributes, volume info) |
 | `path.go` | Conversion to extended `\\?\` paths |
 | `install.ps1` | PowerShell installer and uninstaller |

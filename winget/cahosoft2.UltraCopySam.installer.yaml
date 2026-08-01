@@ -1,6 +1,6 @@
 # yaml-language-server: $schema=https://aka.ms/winget-manifest.installer.1.6.0.schema.json
 PackageIdentifier: cahosoft2.UltraCopySam
-PackageVersion: 0.0.2
+PackageVersion: 0.0.3
 MinimumOSVersion: 10.0.0.0
 InstallerType: portable
 Commands:
@@ -8,7 +8,7 @@ Commands:
 ReleaseDate: 2026-08-01
 Installers:
   - Architecture: x64
-    InstallerUrl: https://github.com/cahosoft2/UltraCopySam/releases/download/v0.0.2/UltraCopySamV002.exe
-    InstallerSha256: E22891936853ECBB3EB244669AFAA16232BFBE78B3E8247764E7630E05D233B6
+    InstallerUrl: https://github.com/cahosoft2/UltraCopySam/releases/download/v0.0.3/UltraCopySamV003.exe
+    InstallerSha256: 04346BB90E1DC6D52D1E55890B4CBC74E8C1760CCB6BD8867B29734FFBC18DDB
 ManifestType: installer
 ManifestVersion: 1.6.0

@@ -34,8 +34,8 @@ automatiza el proceso:
 ```powershell
 winget install Microsoft.WingetCreate
 wingetcreate update cahosoft2.UltraCopySam `
-    --version 0.0.2 `
-    --urls https://github.com/cahosoft2/UltraCopySam/releases/download/v0.0.2/UltraCopySamV002.exe `
+    --version 0.0.3 `
+    --urls https://github.com/cahosoft2/UltraCopySam/releases/download/v0.0.3/UltraCopySamV003.exe `
     --submit
 ```
 

@@ -24,6 +24,7 @@ func main() {
 	quiet := flag.Bool("q", false, "sin progreso ni resumen")
 	follow := flag.Bool("L", false, "seguir enlaces simbólicos y junctions (por defecto se omiten)")
 	update := flag.Bool("u", false, "no copiar los archivos cuyo tamaño y fecha ya coincidan en destino")
+	buffer := flag.Int("cola", 4096, "archivos que pueden esperar en cola; acota la memoria en árboles enormes")
 
 	flag.Usage = func() {
 		exe := filepath.Base(os.Args[0])
@@ -48,6 +49,9 @@ func main() {
 	}
 	if *workers < 1 {
 		*workers = 1
+	}
+	if *buffer < 1 {
+		*buffer = 1
 	}
 
 	src, err := sanitizeArg(flag.Arg(0), "origen")
@@ -79,7 +83,7 @@ func main() {
 		}
 	}
 
-	c := newCopier(*workers, *verbose, *follow, *update, fsDestino)
+	c := newCopier(*workers, *buffer, *verbose, *follow, *update, fsDestino)
 
 	start := time.Now()
 	var stopProgress chan struct{}

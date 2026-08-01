@@ -34,10 +34,15 @@ type stats struct {
 	errors     atomic.Int64
 }
 
+// walkersPorDefecto: workers dedicados a recorrer el árbol. Bastan muy pocos
+// porque listar directorios es dos órdenes de magnitud más rápido que copiar.
+const walkersPorDefecto = 4
+
 type copier struct {
-	q       *queue
+	dirs    *colaDirs
 	st      stats
-	workers int
+	workers int // copias en paralelo (-w)
+	buffer  int // archivos que pueden esperar en cola; acota la memoria
 	verbose bool
 	follow  bool // seguir symlinks/junctions en vez de omitirlos
 	update  bool // saltar los archivos que ya estén iguales en destino
@@ -60,15 +65,16 @@ type entradaDestino struct {
 // newCopier construye el motor de copia. fsDestino es el nombre del sistema de
 // archivos del volumen de destino ("NTFS", "exFAT"...), del que depende la
 // precisión con la que se pueden comparar fechas en modo -u.
-func newCopier(workers int, verbose, follow, update bool, fsDestino string) *copier {
+func newCopier(workers, buffer int, verbose, follow, update bool, fsDestino string) *copier {
 	tolerancia := time.Duration(0) // exacta: lo correcto en NTFS
 	if esFAT(fsDestino) {
 		tolerancia = toleranciaFAT
 	}
 
 	return &copier{
-		q:          newQueue(),
+		dirs:       nuevaColaDirs(),
 		workers:    workers,
+		buffer:     buffer,
 		verbose:    verbose,
 		follow:     follow,
 		update:     update,
@@ -85,49 +91,78 @@ func esFAT(nombre string) bool {
 		strings.EqualFold(nombre, "exFAT")
 }
 
-// run arranca el pool y bloquea hasta que se vacía el árbol.
+// run arranca los dos pools y bloquea hasta que se copia el árbol entero.
+//
+// Recorrido y copia se reparten en pools separados sobre colas distintas. El
+// motivo es la memoria: listar directorios es unas 300 veces más rápido que
+// copiar, así que un recorrido sin freno llena la cola con el árbol completo
+// antes de copiar nada, y el consumo crece con el número de archivos. Aquí la
+// cola de archivos tiene capacidad fija y el recorrido se bloquea cuando está
+// llena, lo que pone un techo a la memoria.
+//
+// La separación es además lo que evita un bloqueo mutuo: los workers de copia
+// solo consumen de la cola de archivos y nunca escriben en ella, de modo que
+// siempre hay quien la drene y el recorrido acaba desbloqueándose. Con un único
+// pool, todos los workers podrían quedarse bloqueados encolando y no quedaría
+// nadie para vaciar.
 func (c *copier) run(src, dst string) {
-	c.q.push(job{src: src, dst: dst, isDir: true})
+	c.dirs.push(&carpeta{src: src, dst: dst})
 
-	var wg sync.WaitGroup
-	wg.Add(c.workers)
-	for i := 0; i < c.workers; i++ {
+	archivos := make(chan archivoJob, c.buffer)
+
+	var recorrido sync.WaitGroup
+	recorrido.Add(walkersPorDefecto)
+	for i := 0; i < walkersPorDefecto; i++ {
 		go func() {
-			defer wg.Done()
+			defer recorrido.Done()
 			for {
-				j, ok := c.q.pop()
+				dir, ok := c.dirs.pop()
 				if !ok {
 					return
 				}
-				if j.isDir {
-					c.walkDir(j.src, j.dst)
-				} else {
-					c.copyOne(j.src, j.dst, j.size)
-				}
-				c.q.done()
+				c.walkDir(dir, archivos)
+				c.dirs.done()
 			}
 		}()
 	}
-	wg.Wait()
+
+	var copia sync.WaitGroup
+	copia.Add(c.workers)
+	for i := 0; i < c.workers; i++ {
+		go func() {
+			defer copia.Done()
+			for j := range archivos {
+				c.copyOne(join(j.dir.src, j.name), join(j.dir.dst, j.name), j.size)
+			}
+		}()
+	}
+
+	recorrido.Wait()
+	close(archivos) // ya no entrarán más archivos; los copiadores drenan y salen
+	copia.Wait()
 }
 
-func (c *copier) walkDir(src, dst string) {
-	yaExistia, err := createDirectory(dst)
+// walkDir recorre un directorio: crea su equivalente en destino, encola los
+// subdirectorios y envía sus archivos al canal de copia. El envío puede
+// bloquearse si el canal está lleno, y eso es intencionado: es el freno que
+// impide que el recorrido se adelante sin límite y dispare la memoria.
+func (c *copier) walkDir(dir *carpeta, archivos chan<- archivoJob) {
+	yaExistia, err := createDirectory(dir.dst)
 	if err != nil {
-		c.reportErr(dst, fmt.Errorf("crear directorio: %w", err))
+		c.reportErr(dir.dst, fmt.Errorf("crear directorio: %w", err))
 		return
 	}
 	c.st.dirs.Add(1)
 
-	f, err := os.Open(src)
+	f, err := os.Open(dir.src)
 	if err != nil {
-		c.reportErr(src, fmt.Errorf("abrir directorio: %w", err))
+		c.reportErr(dir.src, fmt.Errorf("abrir directorio: %w", err))
 		return
 	}
 	entries, err := f.ReadDir(-1) // -1: sin ordenar, es el camino más rápido
 	f.Close()
 	if err != nil {
-		c.reportErr(src, fmt.Errorf("listar directorio: %w", err))
+		c.reportErr(dir.src, fmt.Errorf("listar directorio: %w", err))
 		return
 	}
 
@@ -136,24 +171,23 @@ func (c *copier) walkDir(src, dst string) {
 	// acabamos de crearla está vacía y no hay nada que consultar.
 	var existentes map[string]entradaDestino
 	if c.update && yaExistia {
-		existentes = leerDestino(dst)
+		existentes = leerDestino(dir.dst)
 	}
 
 	for _, e := range entries {
 		name := e.Name()
-		childSrc := join(src, name)
-		childDst := join(dst, name)
 
 		if !c.follow && e.Type()&os.ModeSymlink != 0 {
 			c.st.skipped.Add(1)
 			if c.verbose {
-				fmt.Fprintf(os.Stderr, "omitido (enlace/junction): %s\n", displayPath(childSrc))
+				fmt.Fprintf(os.Stderr, "omitido (enlace/junction): %s\n",
+					displayPath(join(dir.src, name)))
 			}
 			continue
 		}
 
 		if e.IsDir() {
-			c.q.push(job{src: childSrc, dst: childDst, isDir: true})
+			c.dirs.push(&carpeta{src: join(dir.src, name), dst: join(dir.dst, name)})
 			continue
 		}
 
@@ -168,12 +202,14 @@ func (c *copier) walkDir(src, dst string) {
 			c.st.sinCambios.Add(1)
 			c.st.ahorrados.Add(size)
 			if c.verbose {
-				fmt.Fprintf(os.Stderr, "sin cambios: %s\n", displayPath(childDst))
+				fmt.Fprintf(os.Stderr, "sin cambios: %s\n", displayPath(join(dir.dst, name)))
 			}
 			continue
 		}
 
-		c.q.push(job{src: childSrc, dst: childDst, size: size})
+		// Solo el nombre viaja en la cola; dir se comparte con el resto de
+		// archivos de esta misma carpeta.
+		archivos <- archivoJob{dir: dir, name: name, size: size}
 	}
 }
 

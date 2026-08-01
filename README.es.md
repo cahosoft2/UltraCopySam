@@ -58,17 +58,17 @@ Descarga la última versión desde la página de
 **[Releases](https://github.com/cahosoft2/UltraCopySam/releases)**, o
 directamente:
 
-**[⬇ UltraCopySamV002.exe](https://github.com/cahosoft2/UltraCopySam/releases/download/v0.0.2/UltraCopySamV002.exe)**
+**[⬇ UltraCopySamV003.exe](https://github.com/cahosoft2/UltraCopySam/releases/download/v0.0.3/UltraCopySamV003.exe)**
 — Windows 64 bits · 1,91 MB · sin instalador ni dependencias
 
 Verifica la descarga comparando su huella SHA256:
 
 ```powershell
-Get-FileHash UltraCopySamV002.exe -Algorithm SHA256
+Get-FileHash UltraCopySamV003.exe -Algorithm SHA256
 ```
 
 ```text
-E22891936853ECBB3EB244669AFAA16232BFBE78B3E8247764E7630E05D233B6
+04346BB90E1DC6D52D1E55890B4CBC74E8C1760CCB6BD8867B29734FFBC18DDB
 ```
 
 > [!NOTE]
@@ -96,7 +96,7 @@ Al descargar cualquier archivo, Windows le añade una marca invisible llamada
 *Mark of the Web* que indica "esto vino de internet". Basta con quitarla:
 
 ```powershell
-Unblock-File .\UltraCopySamV002.exe
+Unblock-File .\UltraCopySamV003.exe
 ```
 
 A partir de ahí el programa se ejecuta con normalidad, sin más advertencias.
@@ -159,8 +159,10 @@ Las alternativas que existen, por si el proyecto crece:
 
 - **Copia a bajo nivel** con `CopyFileExW`: el kernel transfiere los datos de un
   handle a otro sin pasar por espacio de usuario.
-- **Paralelismo real**: un pool de workers recorre el árbol y copia al mismo
-  tiempo, sin esperar a terminar de listar para empezar a copiar.
+- **Paralelismo real**: pools de workers separados recorren el árbol y copian al
+  mismo tiempo, sin esperar a terminar de listar para empezar a copiar.
+- **Memoria acotada**: el pico se mantiene plano por grande que sea el árbol,
+  medido en 16 MB tanto con 20.000 como con 300.000 archivos.
 - **Reemplaza siempre**, sin confirmaciones. Incluso si el archivo de destino
   está marcado como *solo lectura*, *oculto* o *sistema*.
 - **Sin límite de `MAX_PATH`**: soporta rutas de más de 260 caracteres mediante
@@ -211,7 +213,7 @@ Abre una terminal nueva al terminar para que el `PATH` surta efecto.
 
 | Parámetro | Descripción |
 | --- | --- |
-| `-Version v0.0.2` | Instala una versión concreta en lugar de la última |
+| `-Version v0.0.3` | Instala una versión concreta en lugar de la última |
 | `-InstallDir "D:\herramientas"` | Cambia la carpeta de instalación |
 | `-FromFile ".\UltraCopySam.exe"` | Instala desde un archivo local, sin descargar |
 | `-NoPath` | No modifica el `PATH` |
@@ -241,7 +243,7 @@ o compílalo (ver [Compilación](#compilación)), desbloquéalo y colócalo dond
 prefieras:
 
 ```powershell
-Unblock-File .\UltraCopySamV002.exe
+Unblock-File .\UltraCopySamV003.exe
 ```
 
 Para poder invocarlo como `UltraCopySam` desde cualquier carpeta, añade su
@@ -256,7 +258,7 @@ Para hacerlo permanente, lo más seguro es usar el instalador con `-FromFile`,
 que escribe el `PATH` sin alterar las variables que contenga:
 
 ```powershell
-.\install.ps1 -FromFile ".\UltraCopySamV002.exe" -InstallDir "D:\herramientas\UltraCopySam"
+.\install.ps1 -FromFile ".\UltraCopySamV003.exe" -InstallDir "D:\herramientas\UltraCopySam"
 ```
 
 Sin añadirlo al `PATH` hay que invocarlo por su ruta completa, o con `.\` si
@@ -313,6 +315,7 @@ D:\dev\old\proyecto\x.txt   ->   E:\backup\old\proyecto\x.txt
 | `-v` | Lista cada archivo copiado en lugar de mostrar la línea de progreso. |
 | `-q` | Modo silencioso: sin progreso ni resumen (los errores sí se muestran). |
 | `-L` | Sigue enlaces simbólicos y *junctions*. Por defecto se omiten. |
+| `-cola N` | Archivos que pueden esperar en cola, 4.096 por defecto. Es lo que acota el uso de memoria; rara vez hay que tocarlo. |
 
 > [!IMPORTANT]
 > Las opciones van **antes** de las rutas. `UltraCopySam -u "D:\a" "E:\b"`
@@ -454,34 +457,37 @@ más igualadas.
 
 | Escenario | robocopy `/MT` | UltraCopySam | Ganador |
 | --- | --- | --- | --- |
-| 20.000 archivos pequeños (7,6 MB) | **10,56 s** | 12,77 s | robocopy, por un 21% |
-| 8 archivos grandes (2.000 MB) | 1,49 s | **0,92 s** | UltraCopySam, **1,6× más rápido** |
-| Mixto: 5.006 archivos (734 MB) | **2,74 s** | 3,41 s | robocopy, por un 20% |
-| Segunda pasada, sin cambios | 0,03 s | 0,03 s | Empate |
+| 20.000 archivos pequeños (7,6 MB) | 10,70 s | **10,44 s** | Empate (dentro del ruido) |
+| 8 archivos grandes (2.000 MB) | 1,44 s | **0,87 s** | UltraCopySam, **1,65× más rápido** |
+| Mixto: 5.006 archivos (734 MB) | **2,90 s** | 3,17 s | robocopy, por un 9% |
+| Segunda pasada, sin cambios | 0,03 s | 0,02 s | Empate |
 
 **Cómo leer los resultados:**
 
 - Con **archivos grandes** UltraCopySam gana con claridad, gracias a
   `COPY_FILE_NO_BUFFERING` en archivos de 32 MiB o más.
-- Con **muchos archivos pequeños** robocopy gana por un 21%. El resultado es
-  consistente: en 7 corridas alternadas los rangos ni siquiera se solapan
-  (robocopy 10,08-11,29 s; UltraCopySam 11,73-13,21 s).
+- Con **muchos archivos pequeños** ambos van igualados: en 7 corridas alternadas
+  las medianas quedan a un 2,4%, muy dentro de la variación entre corridas.
 - En **respaldos repetidos** ambos empatan, porque ninguno reescribe lo que no
   ha cambiado.
 
-**De dónde *no* viene esa diferencia.** Se probaron tres hipótesis con un
-prototipo aparte y las tres quedaron descartadas:
+### Cómo se cerró la diferencia en archivos pequeños
+
+La versión 0.0.2 era un **21% más lenta** que robocopy con archivos pequeños. Se
+probaron tres explicaciones plausibles con un prototipo aparte, y las tres
+resultaron falsas:
 
 | Hipótesis | Resultado |
 | --- | --- |
-| `CopyFileExW` pesa demasiado en archivos pequeños; con `ReadFile`/`WriteFile` manual sería más rápido | **Descartada**: quedan a un 0,5% una de otra |
-| Las rutas extendidas `\\?\` cuestan más | **Descartada**: son ligeramente *más* rápidas |
-| La cola con `sync.Cond` es más lenta que un channel de Go | **Descartada**: la cola resultó más rápida que el channel |
+| `CopyFileExW` pesa demasiado en archivos pequeños; con `ReadFile`/`WriteFile` manual sería más rápido | **Falsa**: quedan a un 0,5% una de otra |
+| Las rutas extendidas `\\?\` cuestan más | **Falsa**: son ligeramente *más* rápidas |
+| La cola con `sync.Cond` es más lenta que un channel de Go | **Falsa**: la cola resultó más rápida que el channel |
 
-El coste por archivo tampoco está en el recorrido: recorrer esos mismos 20.000
-archivos en modo `-u` toma **0,04 s**. La causa exacta de la diferencia restante
-aún no está identificada y haría falta un *profiling* real para localizarla. Se
-documenta aquí en lugar de ocultarse.
+La causa real apareció mientras se arreglaba otra cosa: un **único** pool de
+workers se encargaba a la vez de recorrer y de copiar, así que un worker ocupado
+listando un directorio era un worker que no estaba copiando. Separarlos en dos
+pools —4 para recorrer y `-w` para copiar— cerró la diferencia y **redujo a la
+mitad el tiempo en árboles grandes** (300.000 archivos: de 127 s a 60 s).
 
 Puedes reproducirlas con el script de [bench/bench.ps1](bench/bench.ps1).
 
@@ -730,10 +736,17 @@ red (`\\servidor\share`) y el prefijo extendido (`\\?\`).
   caché de archivos de Windows con datos de un solo uso. En archivos pequeños la
   caché sí ayuda, así que ahí no se activa. Si el volumen no soporta el flag
   —algunos recursos de red—, se reintenta automáticamente sin él.
-- **Pool de workers sobre una cola de trabajo compartida**: recorrer el árbol y
-  copiar ocurren simultáneamente, sin una barrera entre "listar" y "copiar". Se
-  usa una cola explícita en lugar de una goroutine por entrada, para que la
-  memoria no crezca en árboles de millones de archivos.
+- **Dos pools de workers separados**: 4 recorren el árbol mientras `-w` copian,
+  cada uno con su propia cola. El recorrido y la copia se solapan por completo, y
+  un worker que está listando un directorio nunca es un worker que podría estar
+  copiando.
+- **Memoria acotada**: la cola de archivos admite como mucho `-cola` entradas
+  (4.096 por defecto), de modo que el recorrido —unas 300 veces más rápido que
+  la copia— no puede adelantarse y acumular el árbol entero en RAM. Cada entrada
+  guarda solo el nombre del archivo y un puntero a su carpeta, así que el texto
+  de las rutas se almacena una vez por directorio y no una vez por archivo. El
+  pico se mantiene plano sea cual sea el tamaño del árbol: **16 MB tanto con
+  20.000 como con 300.000 archivos**.
 - **Rutas extendidas `\\?\`**: además de eliminar el límite de 260 caracteres,
   evitan el coste de normalización de rutas que Win32 aplica en cada llamada.
 - **Listado sin ordenar** (`ReadDir(-1)`) y tamaños obtenidos del propio
@@ -805,8 +818,8 @@ go vet ./...
 | `bench/bench.ps1` | Script de benchmark usado para las cifras publicadas |
 | `main.go` | Interfaz de línea de comandos, línea de progreso y resumen final |
 | `args.go` | Saneamiento de argumentos y validación de rutas |
-| `copier.go` | Motor de copia: pool de workers, recorrido y estadísticas |
-| `queue.go` | Cola de trabajo concurrente con contador de pendientes |
+| `copier.go` | Motor de copia: los dos pools de workers, recorrido, lógica de `-u` y estadísticas |
+| `queue.go` | Cola de directorios y el tipo de trabajo con carpeta compartida que acota la memoria |
 | `winapi.go` | Enlaces directos a `kernel32.dll` (`CopyFileExW`, `CreateDirectoryW`, atributos) |
 | `path.go` | Conversión a rutas extendidas `\\?\` |
 

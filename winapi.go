@@ -19,9 +19,9 @@ var (
 
 // Flags de CopyFileExW / atributos de archivo.
 const (
-	copyFileNoBuffering             = 0x00001000
-	copyFileAllowDecryptedDest      = 0x00000008
-	invalidFileAttributes    uint32 = 0xFFFFFFFF
+	copyFileNoBuffering               = 0x00001000
+	copyFileAllowDecryptedDest        = 0x00000008
+	invalidFileAttributes      uint32 = 0xFFFFFFFF
 
 	fileAttributeReadonly  = 0x00000001
 	fileAttributeHidden    = 0x00000002

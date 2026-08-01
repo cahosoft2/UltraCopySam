@@ -27,6 +27,7 @@ UltraCopySam.exe "D:\proyectos" "E:\backup\proyectos"
 - [Uso](#uso)
 - [Opciones](#opciones)
 - [Ejemplos](#ejemplos)
+- [Copias incrementales](#copias-incrementales)
 - [Comillas dobles y rutas con espacios](#comillas-dobles-y-rutas-con-espacios)
 - [Discos externos USB](#discos-externos-usb)
 - [Qué muestra durante la copia](#qué-muestra-durante-la-copia)
@@ -47,17 +48,17 @@ Descarga la última versión desde la página de
 **[Releases](https://github.com/cahosoft2/UltraCopySam/releases)**, o
 directamente:
 
-**[⬇ UltraCopySamV001.exe](https://github.com/cahosoft2/UltraCopySam/releases/download/v0.0.1/UltraCopySamV001.exe)**
+**[⬇ UltraCopySamV002.exe](https://github.com/cahosoft2/UltraCopySam/releases/download/v0.0.2/UltraCopySamV002.exe)**
 — Windows 64 bits · 1,91 MB · sin instalador ni dependencias
 
 Verifica la descarga comparando su huella SHA256:
 
 ```powershell
-Get-FileHash UltraCopySamV001.exe -Algorithm SHA256
+Get-FileHash UltraCopySamV002.exe -Algorithm SHA256
 ```
 
 ```text
-CBD92EBEF7F081DCA822CD4A9E1E1750F70036F699F4BB538BB572F3304E6FA6
+E22891936853ECBB3EB244669AFAA16232BFBE78B3E8247764E7630E05D233B6
 ```
 
 > [!NOTE]
@@ -85,7 +86,7 @@ Al descargar cualquier archivo, Windows le añade una marca invisible llamada
 *Mark of the Web* que indica "esto vino de internet". Basta con quitarla:
 
 ```powershell
-Unblock-File .\UltraCopySamV001.exe
+Unblock-File .\UltraCopySamV002.exe
 ```
 
 A partir de ahí el programa se ejecuta con normalidad, sin más advertencias.
@@ -200,7 +201,7 @@ Abre una terminal nueva al terminar para que el `PATH` surta efecto.
 
 | Parámetro | Descripción |
 | --- | --- |
-| `-Version v0.0.1` | Instala una versión concreta en lugar de la última |
+| `-Version v0.0.2` | Instala una versión concreta en lugar de la última |
 | `-InstallDir "D:\herramientas"` | Cambia la carpeta de instalación |
 | `-FromFile ".\UltraCopySam.exe"` | Instala desde un archivo local, sin descargar |
 | `-NoPath` | No modifica el `PATH` |
@@ -230,7 +231,7 @@ o compílalo (ver [Compilación](#compilación)), desbloquéalo y colócalo dond
 prefieras:
 
 ```powershell
-Unblock-File .\UltraCopySamV001.exe
+Unblock-File .\UltraCopySamV002.exe
 ```
 
 Para poder invocarlo como `UltraCopySam` desde cualquier carpeta, añade su
@@ -245,7 +246,7 @@ Para hacerlo permanente, lo más seguro es usar el instalador con `-FromFile`,
 que escribe el `PATH` sin alterar las variables que contenga:
 
 ```powershell
-.\install.ps1 -FromFile ".\UltraCopySamV001.exe" -InstallDir "D:\herramientas\UltraCopySam"
+.\install.ps1 -FromFile ".\UltraCopySamV002.exe" -InstallDir "D:\herramientas\UltraCopySam"
 ```
 
 Sin añadirlo al `PATH` hay que invocarlo por su ruta completa, o con `.\` si
@@ -297,10 +298,15 @@ D:\dev\old\proyecto\x.txt   ->   E:\backup\old\proyecto\x.txt
 
 | Opción | Descripción |
 | --- | --- |
+| `-u` | No copia los archivos cuyo tamaño y fecha ya coincidan en destino. Ver [Copias incrementales](#copias-incrementales). |
 | `-w N` | Número de copias en paralelo. Por defecto, el doble de núcleos de CPU. |
 | `-v` | Lista cada archivo copiado en lugar de mostrar la línea de progreso. |
 | `-q` | Modo silencioso: sin progreso ni resumen (los errores sí se muestran). |
 | `-L` | Sigue enlaces simbólicos y *junctions*. Por defecto se omiten. |
+
+> [!IMPORTANT]
+> Las opciones van **antes** de las rutas. `UltraCopySam -u "D:\a" "E:\b"`
+> funciona; `UltraCopySam "D:\a" "E:\b" -u` no, y el programa avisa de ello.
 
 ---
 
@@ -369,6 +375,62 @@ if ($LASTEXITCODE -ne 0) {
 $fecha = Get-Date -Format "yyyy-MM-dd"
 UltraCopySam -w 4 "D:\dev" "E:\backups\$fecha\dev"
 ```
+
+---
+
+## Copias incrementales
+
+Con `-u`, antes de copiar cada archivo se comprueba si en el destino ya hay uno
+con **el mismo tamaño y la misma fecha de modificación**. Si coinciden, se
+omite.
+
+```powershell
+UltraCopySam -u -w 4 "D:\dev" "E:\backup\dev"
+```
+
+```text
+0 archivos, 41 directorios, 0.00 MB en 20ms (0.00 MB/s)
+20000 archivos sin cambios, 7.63 MB que no hubo que reescribir
+```
+
+### Cuándo usarlo
+
+Siempre que **repitas** una copia sobre un destino ya poblado: respaldos
+periódicos, sincronizar un disco externo, o reanudar una copia que se
+interrumpió. La ganancia es enorme porque el coste real de copiar no está en
+mover los bytes, sino en crear cada archivo en el destino.
+
+Medición sobre un árbol de 20.000 archivos:
+
+| Escenario | Sin `-u` | Con `-u` |
+| --- | --- | --- |
+| Primera copia (destino vacío) | 15,7 s | 14,3 s |
+| Segunda pasada (todo igual) | 10,3 s | **0,05 s** |
+
+En la primera copia **no penaliza**: cuando una carpeta de destino acaba de
+crearse, está vacía por definición y no se consulta. En la segunda pasada es
+unas **200 veces más rápido**.
+
+### Cómo lo comprueba sin perder tiempo
+
+Los datos del origen ya vienen gratis con el recorrido. Los del destino se
+obtienen con **un solo listado por carpeta**, no con una consulta por archivo:
+una llamada al sistema por directorio, integrada en el mismo recorrido
+solapado, sin ninguna fase de análisis previa.
+
+### Precisión de la comparación
+
+En **NTFS la comparación de fechas es exacta** (resolución de 100 ns). Solo si
+el destino usa FAT o exFAT —que redondean la hora a 2 segundos— se aplica un
+margen de esa magnitud, porque de lo contrario ningún archivo coincidiría
+jamás. El sistema de archivos se detecta automáticamente.
+
+> [!WARNING]
+> `-u` da por idéntico un archivo que conserve **tamaño y fecha**. Si un
+> programa modifica un archivo manteniendo ambos exactamente iguales, el cambio
+> no se detecta. Es prácticamente imposible por accidente, pero si necesitas la
+> certeza absoluta de que el destino queda igual al origen, ejecuta sin `-u`:
+> el modo normal reescribe siempre.
 
 ---
 
@@ -625,9 +687,10 @@ operaciones a la vez.** Los discos mecánicos no pueden; los SSD sí.
 - **Solo Windows.** Depende de la API de Win32; no compila en Linux ni macOS.
 - **No es un espejo.** No borra en destino lo que ya no está en origen.
 - **No reanuda archivos parciales.** Si una copia se interrumpe, el archivo que
-  estaba en curso se vuelve a copiar completo en la siguiente pasada.
-- **No compara antes de copiar.** Cada ejecución reescribe todos los archivos,
-  aunque sean idénticos a los del destino.
+  estaba en curso se vuelve a copiar completo en la siguiente pasada (con `-u`,
+  los que sí terminaron se saltan).
+- **La comparación de `-u` es por tamaño y fecha**, no por contenido. Ver
+  [Copias incrementales](#copias-incrementales).
 - **No copia ACL ni flujos alternativos (ADS).** Si necesitas preservar
   permisos NTFS, usa `robocopy /COPYALL`.
 - **No admite filtros** por extensión, patrón ni fecha.

@@ -23,6 +23,7 @@ func main() {
 	verbose := flag.Bool("v", false, "listar cada archivo copiado")
 	quiet := flag.Bool("q", false, "sin progreso ni resumen")
 	follow := flag.Bool("L", false, "seguir enlaces simbólicos y junctions (por defecto se omiten)")
+	update := flag.Bool("u", false, "no copiar los archivos cuyo tamaño y fecha ya coincidan en destino")
 
 	flag.Usage = func() {
 		exe := filepath.Base(os.Args[0])
@@ -33,7 +34,8 @@ func main() {
 		fmt.Fprintf(os.Stderr, "y NO deje una barra invertida final dentro de las comillas.\n\n")
 		fmt.Fprintf(os.Stderr, "Ejemplos:\n")
 		fmt.Fprintf(os.Stderr, "  %s \"D:\\Mis Datos\\origen\" \"E:\\Copia de seguridad\\destino\"\n", exe)
-		fmt.Fprintf(os.Stderr, "  %s -w 4 \"\\\\servidor\\share\\datos\" \"D:\\local\"\n\n", exe)
+		fmt.Fprintf(os.Stderr, "  %s -w 4 \"\\\\servidor\\share\\datos\" \"D:\\local\"\n", exe)
+		fmt.Fprintf(os.Stderr, "  %s -u \"D:\\dev\" \"E:\\backup\\dev\"   (respaldo incremental)\n\n", exe)
 		fmt.Fprintf(os.Stderr, "Opciones:\n")
 		flag.PrintDefaults()
 	}
@@ -67,7 +69,17 @@ func main() {
 		fatal("no se puede crear el destino %s: %v", dst, err)
 	}
 
-	c := newCopier(*workers, *verbose, *follow)
+	// El sistema de archivos del destino determina con qué precisión se pueden
+	// comparar fechas en modo -u. Se consulta sobre la ruta original, no sobre
+	// la extendida: GetVolumeInformationW espera la raíz del volumen.
+	fsDestino := ""
+	if *update {
+		if raiz := filepath.VolumeName(dst); raiz != "" {
+			fsDestino = sistemaDeArchivos(raiz + `\`)
+		}
+	}
+
+	c := newCopier(*workers, *verbose, *follow, *update, fsDestino)
 
 	start := time.Now()
 	var stopProgress chan struct{}
@@ -87,6 +99,10 @@ func main() {
 		fmt.Printf("%d archivos, %d directorios, %s en %s (%s/s)\n",
 			c.st.files.Load(), c.st.dirs.Load(), megaBytes(c.st.bytes.Load()),
 			elapsed.Round(time.Millisecond), megaBytes(rate(c.st.bytes.Load(), elapsed)))
+		if n := c.st.sinCambios.Load(); n > 0 {
+			fmt.Printf("%d archivos sin cambios, %s que no hubo que reescribir\n",
+				n, megaBytes(c.st.ahorrados.Load()))
+		}
 		if n := c.st.skipped.Load(); n > 0 {
 			fmt.Printf("%d entradas omitidas (enlaces/junctions)\n", n)
 		}
@@ -112,9 +128,12 @@ func startProgress(c *copier, start time.Time) chan struct{} {
 				return
 			case <-t.C:
 				b := c.st.bytes.Load()
-				fmt.Fprintf(os.Stderr, "\r%-77s",
-					fmt.Sprintf("%d archivos | %s | %s/s",
-						c.st.files.Load(), megaBytes(b), megaBytes(rate(b, time.Since(start)))))
+				linea := fmt.Sprintf("%d archivos | %s | %s/s",
+					c.st.files.Load(), megaBytes(b), megaBytes(rate(b, time.Since(start))))
+				if c.update {
+					linea += fmt.Sprintf(" | %d sin cambios", c.st.sinCambios.Load())
+				}
+				fmt.Fprintf(os.Stderr, "\r%-77s", linea)
 			}
 		}
 	}()
@@ -123,18 +142,20 @@ func startProgress(c *copier, start time.Time) chan struct{} {
 
 // mkdirAll crea el directorio y todos sus padres sobre una ruta extendida.
 func mkdirAll(path string) error {
-	if err := createDirectory(path); err == nil {
+	if _, err := createDirectory(path); err == nil {
 		return nil
 	}
 	i := strings.LastIndexByte(path, '\\')
 	if i <= len(`\\?\`) {
 		// Se llegó a la raíz del volumen: nada más que crear.
-		return createDirectory(path)
+		_, err := createDirectory(path)
+		return err
 	}
 	if err := mkdirAll(path[:i]); err != nil {
 		return err
 	}
-	return createDirectory(path)
+	_, err := createDirectory(path)
+	return err
 }
 
 // isInside indica si child cuelga de parent (comparación case-insensitive,

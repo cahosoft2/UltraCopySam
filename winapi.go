@@ -10,10 +10,11 @@ import (
 var (
 	kernel32 = syscall.NewLazyDLL("kernel32.dll")
 
-	procCopyFileExW        = kernel32.NewProc("CopyFileExW")
-	procCreateDirectoryW   = kernel32.NewProc("CreateDirectoryW")
-	procSetFileAttributesW = kernel32.NewProc("SetFileAttributesW")
-	procGetFileAttributesW = kernel32.NewProc("GetFileAttributesW")
+	procCopyFileExW           = kernel32.NewProc("CopyFileExW")
+	procCreateDirectoryW      = kernel32.NewProc("CreateDirectoryW")
+	procSetFileAttributesW    = kernel32.NewProc("SetFileAttributesW")
+	procGetFileAttributesW    = kernel32.NewProc("GetFileAttributesW")
+	procGetVolumeInformationW = kernel32.NewProc("GetVolumeInformationW")
 )
 
 // Flags de CopyFileExW / atributos de archivo.
@@ -64,20 +65,50 @@ func copyFileEx(src, dst string, flags uint32) error {
 	return nil
 }
 
-// createDirectory crea un único directorio. Si ya existe devuelve nil.
-func createDirectory(path string) error {
+// createDirectory crea un único directorio.
+//
+// Devuelve yaExistia=true si el directorio ya estaba creado. Ese dato importa:
+// un directorio recién creado está vacío por definición, así que el modo -u
+// puede ahorrarse listarlo para buscar archivos que no pueden existir.
+func createDirectory(path string) (yaExistia bool, err error) {
 	p, err := syscall.UTF16PtrFromString(path)
 	if err != nil {
-		return err
+		return false, err
 	}
 	r, _, e := procCreateDirectoryW.Call(uintptr(unsafe.Pointer(p)), 0)
 	if r == 0 {
 		if e == errorAlreadyExists {
-			return nil
+			return true, nil
 		}
-		return e
+		return false, e
 	}
-	return nil
+	return false, nil
+}
+
+// sistemaDeArchivos devuelve el nombre del sistema de archivos del volumen
+// ("NTFS", "exFAT", "FAT32"...). raiz debe ser la raíz del volumen, con barra
+// final: "D:\" o "\\servidor\recurso\".
+//
+// Se usa para decidir la precisión con la que comparar fechas: NTFS las guarda
+// con resolución de 100 ns, mientras que FAT32 redondea a 2 segundos.
+func sistemaDeArchivos(raiz string) string {
+	p, err := syscall.UTF16PtrFromString(raiz)
+	if err != nil {
+		return ""
+	}
+	nombre := make([]uint16, 261)
+
+	r, _, _ := procGetVolumeInformationW.Call(
+		uintptr(unsafe.Pointer(p)),
+		0, 0, // nombre del volumen: no interesa
+		0, 0, 0, // número de serie, longitud máxima, flags: no interesan
+		uintptr(unsafe.Pointer(&nombre[0])),
+		uintptr(len(nombre)),
+	)
+	if r == 0 {
+		return ""
+	}
+	return syscall.UTF16ToString(nombre)
 }
 
 func getFileAttributes(path string) (uint32, error) {

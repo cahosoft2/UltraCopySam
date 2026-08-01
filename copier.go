@@ -30,7 +30,9 @@ type stats struct {
 	bytes      atomic.Int64
 	skipped    atomic.Int64
 	sinCambios atomic.Int64 // omitidos por -u: ya estaban iguales en destino
-	ahorrados  atomic.Int64 // bytes que no hubo que reescribir gracias a -u
+	reanudados atomic.Int64 // omitidos por -r: directorios o archivos ya completados
+	parciales  atomic.Int64 // corregidos por -r: reemplazados por estar incompletos
+	ahorrados  atomic.Int64 // bytes que no hubo que reescribir gracias a -u/-r
 	errors     atomic.Int64
 }
 
@@ -46,6 +48,8 @@ type copier struct {
 	verbose bool
 	follow  bool // seguir symlinks/junctions en vez de omitirlos
 	update  bool // saltar los archivos que ya estén iguales en destino
+	resume  bool // reanudar desde .ucsam-state u omitir completados
+	state   *sessionState
 
 	// tolerancia al comparar fechas en modo -u. Cero (exacta) salvo que el
 	// destino sea FAT/exFAT.
@@ -64,8 +68,8 @@ type entradaDestino struct {
 
 // newCopier construye el motor de copia. fsDestino es el nombre del sistema de
 // archivos del volumen de destino ("NTFS", "exFAT"...), del que depende la
-// precisión con la que se pueden comparar fechas en modo -u.
-func newCopier(workers, buffer int, verbose, follow, update bool, fsDestino string) *copier {
+// precisión con la que se pueden comparar fechas en modo -u/-r.
+func newCopier(workers, buffer int, verbose, follow, update, resume bool, state *sessionState, fsDestino string) *copier {
 	tolerancia := time.Duration(0) // exacta: lo correcto en NTFS
 	if esFAT(fsDestino) {
 		tolerancia = toleranciaFAT
@@ -78,6 +82,8 @@ func newCopier(workers, buffer int, verbose, follow, update bool, fsDestino stri
 		verbose:    verbose,
 		follow:     follow,
 		update:     update,
+		resume:     resume,
+		state:      state,
 		tolerancia: tolerancia,
 	}
 }
@@ -92,21 +98,8 @@ func esFAT(nombre string) bool {
 }
 
 // run arranca los dos pools y bloquea hasta que se copia el árbol entero.
-//
-// Recorrido y copia se reparten en pools separados sobre colas distintas. El
-// motivo es la memoria: listar directorios es unas 300 veces más rápido que
-// copiar, así que un recorrido sin freno llena la cola con el árbol completo
-// antes de copiar nada, y el consumo crece con el número de archivos. Aquí la
-// cola de archivos tiene capacidad fija y el recorrido se bloquea cuando está
-// llena, lo que pone un techo a la memoria.
-//
-// La separación es además lo que evita un bloqueo mutuo: los workers de copia
-// solo consumen de la cola de archivos y nunca escriben en ella, de modo que
-// siempre hay quien la drene y el recorrido acaba desbloqueándose. Con un único
-// pool, todos los workers podrían quedarse bloqueados encolando y no quedaría
-// nadie para vaciar.
 func (c *copier) run(src, dst string) {
-	c.dirs.push(&carpeta{src: src, dst: dst})
+	c.dirs.push(&carpeta{src: src, dst: dst, rel: ""})
 
 	archivos := make(chan archivoJob, c.buffer)
 
@@ -132,7 +125,7 @@ func (c *copier) run(src, dst string) {
 		go func() {
 			defer copia.Done()
 			for j := range archivos {
-				c.copyOne(join(j.dir.src, j.name), join(j.dir.dst, j.name), j.size)
+				c.copyOne(j)
 			}
 		}()
 	}
@@ -143,12 +136,23 @@ func (c *copier) run(src, dst string) {
 }
 
 // walkDir recorre un directorio: crea su equivalente en destino, encola los
-// subdirectorios y envía sus archivos al canal de copia. El envío puede
-// bloquearse si el canal está lleno, y eso es intencionado: es el freno que
-// impide que el recorrido se adelante sin límite y dispare la memoria.
+// subdirectorios y envía sus archivos al canal de copia.
 func (c *copier) walkDir(dir *carpeta, archivos chan<- archivoJob) {
+	if c.resume && c.state != nil && c.state.isDirCompleted(dir.rel) {
+		c.st.dirs.Add(1)
+		c.st.reanudados.Add(1)
+		if c.verbose {
+			fmt.Fprintf(os.Stderr, "reanudado (carpeta omitida por estado): %s\n", displayPath(dir.dst))
+		}
+		return
+	}
+
+	dir.activeJobs.Store(1)
+	defer dir.finishJob(c)
+
 	yaExistia, err := createDirectory(dir.dst)
 	if err != nil {
+		dir.hasErrors.Store(true)
 		c.reportErr(dir.dst, fmt.Errorf("crear directorio: %w", err))
 		return
 	}
@@ -156,21 +160,21 @@ func (c *copier) walkDir(dir *carpeta, archivos chan<- archivoJob) {
 
 	f, err := os.Open(dir.src)
 	if err != nil {
+		dir.hasErrors.Store(true)
 		c.reportErr(dir.src, fmt.Errorf("abrir directorio: %w", err))
 		return
 	}
 	entries, err := f.ReadDir(-1) // -1: sin ordenar, es el camino más rápido
 	f.Close()
 	if err != nil {
+		dir.hasErrors.Store(true)
 		c.reportErr(dir.src, fmt.Errorf("listar directorio: %w", err))
 		return
 	}
 
-	// En modo -u se necesita saber qué hay ya en destino. Se resuelve con un
-	// único listado por carpeta, no con un stat por archivo. Si la carpeta
-	// acabamos de crearla está vacía y no hay nada que consultar.
+	// En modo -u o -r se necesita saber qué hay ya en destino.
 	var existentes map[string]entradaDestino
-	if c.update && yaExistia {
+	if (c.update || c.resume) && yaExistia {
 		existentes = leerDestino(dir.dst)
 	}
 
@@ -187,7 +191,8 @@ func (c *copier) walkDir(dir *carpeta, archivos chan<- archivoJob) {
 		}
 
 		if e.IsDir() {
-			c.dirs.push(&carpeta{src: join(dir.src, name), dst: join(dir.dst, name)})
+			relChild := join(dir.rel, name)
+			c.dirs.push(&carpeta{src: join(dir.src, name), dst: join(dir.dst, name), rel: relChild})
 			continue
 		}
 
@@ -198,25 +203,39 @@ func (c *copier) walkDir(dir *carpeta, archivos chan<- archivoJob) {
 			modificacion = info.ModTime()
 		}
 
-		if existentes != nil && c.sinCambios(existentes[strings.ToLower(name)], size, modificacion) {
-			c.st.sinCambios.Add(1)
-			c.st.ahorrados.Add(size)
-			if c.verbose {
-				fmt.Fprintf(os.Stderr, "sin cambios: %s\n", displayPath(join(dir.dst, name)))
+		if existentes != nil {
+			destFile, exists := existentes[strings.ToLower(name)]
+			if exists && c.resume {
+				if destFile.tamano != size {
+					c.st.parciales.Add(1)
+					if c.verbose {
+						fmt.Fprintf(os.Stderr, "parcial detectado (reemplazando): %s\n", displayPath(join(dir.dst, name)))
+					}
+					_ = os.Remove(join(dir.dst, name))
+				} else if c.sinCambios(destFile, size, modificacion) {
+					c.st.reanudados.Add(1)
+					c.st.ahorrados.Add(size)
+					if c.verbose {
+						fmt.Fprintf(os.Stderr, "reanudado (archivo idéntico): %s\n", displayPath(join(dir.dst, name)))
+					}
+					continue
+				}
+			} else if c.update && c.sinCambios(destFile, size, modificacion) {
+				c.st.sinCambios.Add(1)
+				c.st.ahorrados.Add(size)
+				if c.verbose {
+					fmt.Fprintf(os.Stderr, "sin cambios: %s\n", displayPath(join(dir.dst, name)))
+				}
+				continue
 			}
-			continue
 		}
 
-		// Solo el nombre viaja en la cola; dir se comparte con el resto de
-		// archivos de esta misma carpeta.
+		dir.activeJobs.Add(1)
 		archivos <- archivoJob{dir: dir, name: name, size: size}
 	}
 }
 
-// leerDestino indexa el contenido de una carpeta de destino por nombre en
-// minúsculas, porque el sistema de archivos de Windows no distingue mayúsculas.
-// Si la carpeta no se puede listar devuelve nil y todo se copiará: ante la duda,
-// copiar.
+// leerDestino indexa el contenido de una carpeta de destino por nombre en minúsculas.
 func leerDestino(dst string) map[string]entradaDestino {
 	f, err := os.Open(dst)
 	if err != nil {
@@ -245,10 +264,7 @@ func leerDestino(dst string) map[string]entradaDestino {
 	return m
 }
 
-// sinCambios decide si el archivo de destino puede darse por idéntico al de
-// origen. Solo lo afirma cuando coinciden tamaño y fecha; cualquier otra
-// situación —incluido que el archivo no exista, que es el valor cero— devuelve
-// false y provoca la copia.
+// sinCambios decide si el archivo de destino puede darse por idéntico al de origen.
 func (c *copier) sinCambios(destino entradaDestino, tamano int64, modificacion time.Time) bool {
 	if destino.modificacion.IsZero() || destino.tamano != tamano {
 		return false
@@ -263,7 +279,13 @@ func (c *copier) sinCambios(destino entradaDestino, tamano int64, modificacion t
 	return diferencia <= c.tolerancia
 }
 
-func (c *copier) copyOne(src, dst string, size int64) {
+func (c *copier) copyOne(j archivoJob) {
+	defer j.dir.finishJob(c)
+
+	src := join(j.dir.src, j.name)
+	dst := join(j.dir.dst, j.name)
+	size := j.size
+
 	var flags uint32
 	if size >= noBufferingThreshold {
 		flags |= copyFileNoBuffering
@@ -272,14 +294,11 @@ func (c *copier) copyOne(src, dst string, size int64) {
 
 	err := copyFileEx(src, dst, flags)
 
-	// Algunos volúmenes (red, ciertos filesystems) rechazan NO_BUFFERING.
 	if err != nil && flags&copyFileNoBuffering != 0 && isUnsupported(err) {
 		flags &^= copyFileNoBuffering
 		err = copyFileEx(src, dst, flags)
 	}
 
-	// Destino de solo lectura / oculto / sistema: se limpia y se reintenta,
-	// porque el requisito es reemplazar sin preguntar.
 	if err != nil && isAccessDenied(err) {
 		if clearBlockingAttrs(dst) == nil {
 			err = copyFileEx(src, dst, flags)
@@ -287,6 +306,7 @@ func (c *copier) copyOne(src, dst string, size int64) {
 	}
 
 	if err != nil {
+		j.dir.hasErrors.Store(true)
 		c.reportErr(src, err)
 		return
 	}
@@ -308,8 +328,7 @@ func isUnsupported(err error) bool {
 	return ok && (errno == errorInvalidParam || errno == errorNotSupported || errno == errorInvalidFunc)
 }
 
-// reportErr contabiliza el fallo y lo imprime, pero no aborta: la copia
-// continúa con el resto del árbol.
+// reportErr contabiliza el fallo y lo imprime, pero no aborta.
 func (c *copier) reportErr(path string, err error) {
 	c.st.errors.Add(1)
 	c.errMu.Lock()

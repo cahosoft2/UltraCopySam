@@ -58,17 +58,17 @@ Get the latest build from the
 **[Releases page](https://github.com/cahosoft2/UltraCopySam/releases)**, or
 directly:
 
-**[⬇ UltraCopySamV003.exe](https://github.com/cahosoft2/UltraCopySam/releases/download/v0.0.3/UltraCopySamV003.exe)**
+**[⬇ UltraCopySamV004.exe](https://github.com/cahosoft2/UltraCopySam/releases/download/v0.0.4/UltraCopySamV004.exe)**
 — Windows 64-bit · 1.91 MB · no installer, no dependencies
 
 Verify the download against its SHA256 hash:
 
 ```powershell
-Get-FileHash UltraCopySamV003.exe -Algorithm SHA256
+Get-FileHash UltraCopySamV004.exe -Algorithm SHA256
 ```
 
 ```text
-04346BB90E1DC6D52D1E55890B4CBC74E8C1760CCB6BD8867B29734FFBC18DDB
+BC870DDA649ABE6ED8B22F628C3A651785962DCD5F7747E2B4B761CD3963A472
 ```
 
 > [!NOTE]
@@ -96,7 +96,7 @@ When you download any file, Windows attaches an invisible marker called the
 *Mark of the Web* that means "this came from the internet". Just remove it:
 
 ```powershell
-Unblock-File .\UltraCopySamV003.exe
+Unblock-File .\UltraCopySamV004.exe
 ```
 
 From then on the program runs normally, with no further warnings.
@@ -211,7 +211,7 @@ Open a new terminal afterwards so the `PATH` change takes effect.
 
 | Parameter | Description |
 | --- | --- |
-| `-Version v0.0.3` | Install a specific version instead of the latest |
+| `-Version v0.0.4` | Install a specific version instead of the latest |
 | `-InstallDir "D:\tools"` | Change the install folder |
 | `-FromFile ".\UltraCopySam.exe"` | Install from a local file, no download |
 | `-NoPath` | Do not modify `PATH` |
@@ -251,10 +251,13 @@ $env:PATH += ";D:\tools\UltraCopySam"
 ```
 
 To make it permanent, the safest route is the installer with `-FromFile`, which
-writes `PATH` without expanding any variables it may contain:
+writes `PATH` without expaUnblock-File .\UltraCopySamV004.exe
+```
+
+Or pass it directly to `install.ps1`:
 
 ```powershell
-.\install.ps1 -FromFile ".\UltraCopySamV003.exe" -InstallDir "D:\tools\UltraCopySam"
+.\install.ps1 -FromFile ".\UltraCopySamV004.exe" -InstallDir "D:\tools\UltraCopySam"
 ```
 
 Without it on the `PATH` you must call it by full path, or with `.\` when you
@@ -306,6 +309,7 @@ D:\dev\old\project\x.txt   ->   E:\backup\old\project\x.txt
 
 | Option | Description |
 | --- | --- |
+| `-r` | Resume an interrupted copy using `.ucsam-state`, skipping completed subtrees and replacing partial files. |
 | `-u` | Skip files whose size and timestamp already match at the destination. See [Incremental copies](#incremental-copies). |
 | `-w N` | Number of parallel copies. Defaults to twice the CPU core count. |
 | `-v` | List every copied file instead of showing the progress line. |
@@ -339,6 +343,12 @@ UltraCopySam "D:\My Documents\Accounts" "E:\Backup\Accounts"
 
 ```powershell
 UltraCopySam -u -w 4 "D:\dev" "E:\backup\dev"
+```
+
+### Resume interrupted copy
+
+```powershell
+UltraCopySam -r "D:\projects" "E:\backup\projects"
 ```
 
 ### To an external USB drive

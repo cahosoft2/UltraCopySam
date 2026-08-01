@@ -58,17 +58,17 @@ Descarga la última versión desde la página de
 **[Releases](https://github.com/cahosoft2/UltraCopySam/releases)**, o
 directamente:
 
-**[⬇ UltraCopySamV003.exe](https://github.com/cahosoft2/UltraCopySam/releases/download/v0.0.3/UltraCopySamV003.exe)**
+**[⬇ UltraCopySamV004.exe](https://github.com/cahosoft2/UltraCopySam/releases/download/v0.0.4/UltraCopySamV004.exe)**
 — Windows 64 bits · 1,91 MB · sin instalador ni dependencias
 
 Verifica la descarga comparando su huella SHA256:
 
 ```powershell
-Get-FileHash UltraCopySamV003.exe -Algorithm SHA256
+Get-FileHash UltraCopySamV004.exe -Algorithm SHA256
 ```
 
 ```text
-04346BB90E1DC6D52D1E55890B4CBC74E8C1760CCB6BD8867B29734FFBC18DDB
+BC870DDA649ABE6ED8B22F628C3A651785962DCD5F7747E2B4B761CD3963A472
 ```
 
 > [!NOTE]
@@ -96,7 +96,7 @@ Al descargar cualquier archivo, Windows le añade una marca invisible llamada
 *Mark of the Web* que indica "esto vino de internet". Basta con quitarla:
 
 ```powershell
-Unblock-File .\UltraCopySamV003.exe
+Unblock-File .\UltraCopySamV004.exe
 ```
 
 A partir de ahí el programa se ejecuta con normalidad, sin más advertencias.
@@ -213,7 +213,7 @@ Abre una terminal nueva al terminar para que el `PATH` surta efecto.
 
 | Parámetro | Descripción |
 | --- | --- |
-| `-Version v0.0.3` | Instala una versión concreta en lugar de la última |
+| `-Version v0.0.4` | Instala una versión concreta en lugar de la última |
 | `-InstallDir "D:\herramientas"` | Cambia la carpeta de instalación |
 | `-FromFile ".\UltraCopySam.exe"` | Instala desde un archivo local, sin descargar |
 | `-NoPath` | No modifica el `PATH` |
@@ -243,7 +243,7 @@ o compílalo (ver [Compilación](#compilación)), desbloquéalo y colócalo dond
 prefieras:
 
 ```powershell
-Unblock-File .\UltraCopySamV003.exe
+Unblock-File .\UltraCopySamV004.exe
 ```
 
 Para poder invocarlo como `UltraCopySam` desde cualquier carpeta, añade su
@@ -258,7 +258,7 @@ Para hacerlo permanente, lo más seguro es usar el instalador con `-FromFile`,
 que escribe el `PATH` sin alterar las variables que contenga:
 
 ```powershell
-.\install.ps1 -FromFile ".\UltraCopySamV003.exe" -InstallDir "D:\herramientas\UltraCopySam"
+.\install.ps1 -FromFile ".\UltraCopySamV004.exe" -InstallDir "D:\herramientas\UltraCopySam"
 ```
 
 Sin añadirlo al `PATH` hay que invocarlo por su ruta completa, o con `.\` si
@@ -310,6 +310,7 @@ D:\dev\old\proyecto\x.txt   ->   E:\backup\old\proyecto\x.txt
 
 | Opción | Descripción |
 | --- | --- |
+| `-r` | Reanuda una copia interrumpida usando `.ucsam-state`, omitiendo subárboles completados y corrigiendo parciales. |
 | `-u` | No copia los archivos cuyo tamaño y fecha ya coincidan en destino. Ver [Copias incrementales](#copias-incrementales). |
 | `-w N` | Número de copias en paralelo. Por defecto, el doble de núcleos de CPU. |
 | `-v` | Lista cada archivo copiado en lugar de mostrar la línea de progreso. |
@@ -329,6 +330,12 @@ D:\dev\old\proyecto\x.txt   ->   E:\backup\old\proyecto\x.txt
 
 ```powershell
 UltraCopySam "D:\proyectos" "E:\backup\proyectos"
+```
+
+### Reanudar copia interrumpida
+
+```powershell
+UltraCopySam -r "D:\proyectos" "E:\backup\proyectos"
 ```
 
 ### Rutas con espacios

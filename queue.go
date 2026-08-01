@@ -2,7 +2,10 @@
 
 package main
 
-import "sync"
+import (
+	"sync"
+	"sync/atomic"
+)
 
 // carpeta es un par de rutas origen/destino ya compuestas. Se comparte por
 // puntero entre todos los archivos que contiene, de modo que el texto de la
@@ -11,6 +14,21 @@ import "sync"
 type carpeta struct {
 	src string
 	dst string
+	rel string
+
+	activeJobs atomic.Int64
+	hasErrors  atomic.Bool
+}
+
+func (c *carpeta) finishJob(cop *copier) {
+	if c == nil || cop == nil || cop.state == nil {
+		return
+	}
+	if c.activeJobs.Add(-1) == 0 {
+		if !c.hasErrors.Load() {
+			cop.state.markDirCompleted(c.rel)
+		}
+	}
 }
 
 // archivoJob es un archivo pendiente de copiar. Guarda solo su nombre; las

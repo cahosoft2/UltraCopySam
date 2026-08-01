@@ -1,6 +1,6 @@
 # yaml-language-server: $schema=https://aka.ms/winget-manifest.defaultLocale.1.6.0.schema.json
 PackageIdentifier: cahosoft2.UltraCopySam
-PackageVersion: 0.0.3
+PackageVersion: 0.0.4
 PackageLocale: en-US
 Publisher: Cristian Alfonso Hoyo Ozuna
 PublisherUrl: https://github.com/cahosoft2
@@ -24,6 +24,7 @@ Description: |-
   - True parallelism with a configurable worker count.
   - Incremental mode (-u) that skips files whose size and timestamp already
     match at the destination.
+  - Resume mode (-r) that resumes interrupted copies using a session state file.
   - Support for paths longer than 260 characters via the \\?\ extended prefix.
   - Fault tolerant: a locked file does not abort the copy.
   - Clear, explanatory error messages instead of numeric codes.
@@ -37,10 +38,11 @@ Tags:
   - file-copy
   - files
   - incremental
+  - resume
   - ntfs
   - robocopy
   - sync
-ReleaseNotesUrl: https://github.com/cahosoft2/UltraCopySam/releases/tag/v0.0.3
+ReleaseNotesUrl: https://github.com/cahosoft2/UltraCopySam/releases/tag/v0.0.4
 Documentations:
   - DocumentLabel: README
     DocumentUrl: https://github.com/cahosoft2/UltraCopySam#readme

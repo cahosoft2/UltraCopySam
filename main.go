@@ -12,9 +12,11 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"os/signal"
 	"path/filepath"
 	"runtime"
 	"strings"
+	"syscall"
 	"time"
 )
 
@@ -24,6 +26,7 @@ func main() {
 	quiet := flag.Bool("q", false, "sin progreso ni resumen")
 	follow := flag.Bool("L", false, "seguir enlaces simbólicos y junctions (por defecto se omiten)")
 	update := flag.Bool("u", false, "no copiar los archivos cuyo tamaño y fecha ya coincidan en destino")
+	resume := flag.Bool("r", false, "reanudar copia interrumpida omitiendo lo ya completado (.ucsam-state)")
 	buffer := flag.Int("cola", 4096, "archivos que pueden esperar en cola; acota la memoria en árboles enormes")
 
 	flag.Usage = func() {
@@ -36,7 +39,8 @@ func main() {
 		fmt.Fprintf(os.Stderr, "Ejemplos:\n")
 		fmt.Fprintf(os.Stderr, "  %s \"D:\\Mis Datos\\origen\" \"E:\\Copia de seguridad\\destino\"\n", exe)
 		fmt.Fprintf(os.Stderr, "  %s -w 4 \"\\\\servidor\\share\\datos\" \"D:\\local\"\n", exe)
-		fmt.Fprintf(os.Stderr, "  %s -u \"D:\\dev\" \"E:\\backup\\dev\"   (respaldo incremental)\n\n", exe)
+		fmt.Fprintf(os.Stderr, "  %s -u \"D:\\dev\" \"E:\\backup\\dev\"   (respaldo incremental)\n", exe)
+		fmt.Fprintf(os.Stderr, "  %s -r \"D:\\origen\" \"E:\\destino\"   (reanudar copia interrumpida)\n\n", exe)
 		fmt.Fprintf(os.Stderr, "Opciones:\n")
 		flag.PrintDefaults()
 	}
@@ -73,17 +77,55 @@ func main() {
 		fatal("no se puede crear el destino %s: %v", dst, err)
 	}
 
+	var state *sessionState
+	if *resume {
+		st, err := loadSessionState(srcExt, dstExt)
+		if err != nil {
+			if !os.IsNotExist(err) && !strings.Contains(err.Error(), "no such file") {
+				fatal("%v", err)
+			}
+			state = newSessionState(srcExt, dstExt)
+		} else {
+			state = st
+		}
+	}
+
 	// El sistema de archivos del destino determina con qué precisión se pueden
-	// comparar fechas en modo -u. Se consulta sobre la ruta original, no sobre
-	// la extendida: GetVolumeInformationW espera la raíz del volumen.
+	// comparar fechas en modo -u o -r. Se consulta sobre la ruta original.
 	fsDestino := ""
-	if *update {
+	if *update || *resume {
 		if raiz := filepath.VolumeName(dst); raiz != "" {
 			fsDestino = sistemaDeArchivos(raiz + `\`)
 		}
 	}
 
-	c := newCopier(*workers, *buffer, *verbose, *follow, *update, fsDestino)
+	c := newCopier(*workers, *buffer, *verbose, *follow, *update, *resume, state, fsDestino)
+
+	var stopStateTicker chan struct{}
+	if c.state != nil {
+		stopStateTicker = make(chan struct{})
+		go func() {
+			t := time.NewTicker(2 * time.Second)
+			defer t.Stop()
+			for {
+				select {
+				case <-stopStateTicker:
+					return
+				case <-t.C:
+					_ = c.state.saveAtomic()
+				}
+			}
+		}()
+
+		sigChan := make(chan os.Signal, 1)
+		signal.Notify(sigChan, os.Interrupt, syscall.SIGINT, syscall.SIGTERM)
+		go func() {
+			<-sigChan
+			fmt.Fprintf(os.Stderr, "\nUltraCopySam: copia interrumpida. Guardando estado en .ucsam-state...\n")
+			_ = c.state.saveAtomic()
+			os.Exit(1)
+		}()
+	}
 
 	start := time.Now()
 	var stopProgress chan struct{}
@@ -97,6 +139,18 @@ func main() {
 		close(stopProgress)
 	}
 
+	if stopStateTicker != nil {
+		close(stopStateTicker)
+	}
+
+	if c.state != nil {
+		if c.st.errors.Load() == 0 {
+			c.state.remove()
+		} else {
+			_ = c.state.saveAtomic()
+		}
+	}
+
 	elapsed := time.Since(start)
 	if !*quiet {
 		fmt.Fprintf(os.Stderr, "\r%s\r", strings.Repeat(" ", 78))
@@ -106,6 +160,12 @@ func main() {
 		if n := c.st.sinCambios.Load(); n > 0 {
 			fmt.Printf("%d archivos sin cambios, %s que no hubo que reescribir\n",
 				n, megaBytes(c.st.ahorrados.Load()))
+		}
+		if n := c.st.reanudados.Load(); n > 0 {
+			fmt.Printf("%d elementos reanudados (omitidos por estar ya completados)\n", n)
+		}
+		if n := c.st.parciales.Load(); n > 0 {
+			fmt.Printf("%d archivos parciales corregidos y re-copiados limpiamente\n", n)
 		}
 		if n := c.st.skipped.Load(); n > 0 {
 			fmt.Printf("%d entradas omitidas (enlaces/junctions)\n", n)
@@ -136,6 +196,9 @@ func startProgress(c *copier, start time.Time) chan struct{} {
 					c.st.files.Load(), megaBytes(b), megaBytes(rate(b, time.Since(start))))
 				if c.update {
 					linea += fmt.Sprintf(" | %d sin cambios", c.st.sinCambios.Load())
+				}
+				if c.resume {
+					linea += fmt.Sprintf(" | %d reanudados", c.st.reanudados.Load())
 				}
 				fmt.Fprintf(os.Stderr, "\r%-77s", linea)
 			}

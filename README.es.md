@@ -816,6 +816,7 @@ go vet ./...
 | --- | --- |
 | `install.ps1` | Instalador y desinstalador para PowerShell |
 | `bench/bench.ps1` | Script de benchmark usado para las cifras publicadas |
+| `docs/ANALISIS.md` | Análisis técnico completo del proyecto, para desarrolladores |
 | `main.go` | Interfaz de línea de comandos, línea de progreso y resumen final |
 | `args.go` | Saneamiento de argumentos y validación de rutas |
 | `copier.go` | Motor de copia: los dos pools de workers, recorrido, lógica de `-u` y estadísticas |
@@ -823,7 +824,14 @@ go vet ./...
 | `winapi.go` | Enlaces directos a `kernel32.dll` (`CopyFileExW`, `CreateDirectoryW`, atributos) |
 | `path.go` | Conversión a rutas extendidas `\\?\` |
 
-Todos los archivos llevan la etiqueta de compilación `//go:build windows`.
+Todos los archivos Go llevan la etiqueta de compilación `//go:build windows`.
+
+> [!TIP]
+> **[docs/ANALISIS.md](docs/ANALISIS.md)** es un análisis técnico en profundidad
+> para desarrolladores: arquitectura, el modelo de concurrencia y por qué no
+> puede bloquearse, cada decisión de diseño con sus mediciones, las hipótesis que
+> se probaron y resultaron falsas, y las trampas de Windows encontradas por el
+> camino. Léelo antes de tocar el motor.
 
 ---
 

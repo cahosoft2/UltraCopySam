@@ -808,6 +808,13 @@ go vet ./...
 
 Every Go file carries the `//go:build windows` build tag.
 
+> [!TIP]
+> **[docs/ANALISIS.md](docs/ANALISIS.md)** is a deep technical write-up for
+> developers (in Spanish): architecture, the concurrency model and why it cannot
+> deadlock, every design decision with its measurements, the hypotheses that were
+> tested and turned out wrong, and the Windows pitfalls found along the way. Read
+> it before changing the engine.
+
 ---
 
 ## License

@@ -36,6 +36,7 @@ UltraCopySam.exe "D:\proyectos" "E:\backup\proyectos"
 - [Opciones](#opciones)
 - [Ejemplos](#ejemplos)
 - [Copias incrementales](#copias-incrementales)
+- [Reanudar copias interrumpidas](#reanudar-copias-interrumpidas)
 - [Comparativa con robocopy](#comparativa-con-robocopy)
 - [¿Usar esto en lugar de robocopy?](#usar-esto-en-lugar-de-robocopy)
 - [Comillas dobles y rutas con espacios](#comillas-dobles-y-rutas-con-espacios)
@@ -165,6 +166,13 @@ Las alternativas que existen, por si el proyecto crece:
   medido en 16 MB tanto con 20.000 como con 300.000 archivos.
 - **Reemplaza siempre**, sin confirmaciones. Incluso si el archivo de destino
   está marcado como *solo lectura*, *oculto* o *sistema*.
+- **Modo incremental** (`-u`): omite archivos cuyo tamaño y fecha ya coincidan
+  en el destino.
+- **Modo reanudación** (`-r`): retoma una copia interrumpida usando un archivo
+  `.ucsam-state` en la raíz del destino. Los subárboles completados se omiten
+  por completo; los archivos parciales se re-copian desde cero. El estado se
+  guarda de forma atómica cada 2 s y al pulsar `Ctrl+C`. El archivo de estado
+  se elimina automáticamente al completarse la copia.
 - **Sin límite de `MAX_PATH`**: soporta rutas de más de 260 caracteres mediante
   el prefijo extendido `\\?\`.
 - **Tolerante a fallos**: un archivo bloqueado o sin permisos no aborta la
@@ -451,6 +459,61 @@ jamás. El sistema de archivos se detecta automáticamente.
 > no se detecta. Es prácticamente imposible por accidente, pero si necesitas la
 > certeza absoluta de que el destino queda igual al origen, ejecuta sin `-u`:
 > el modo normal reescribe siempre.
+
+---
+
+## Reanudar copias interrumpidas
+
+Con `-r`, si una copia anterior al mismo destino fue interrumpida, la copia
+retoma donde se quedó en vez de empezar desde cero.
+
+```powershell
+UltraCopySam -r "D:\proyectos" "E:\backup\proyectos"
+```
+
+```text
+25000 archivos, 1200 directorios, 4500.00 MB en 15.2s (296.05 MB/s)
+18400 elementos reanudados (omitidos por estar ya completados)
+3 archivos parciales corregidos y re-copiados limpiamente
+```
+
+### Cómo funciona
+
+1. **Con `-r` activo**: UltraCopySam busca `<destino>\.ucsam-state`. Si existe
+   y coincide con el origen, carga el estado y reanuda. El archivo de estado
+   se actualiza en disco cada 2 segundos y al pulsar `Ctrl+C` (escritura
+   atómica: `.tmp` → rename). Cuando la copia termina al 100%, el archivo de
+   estado se elimina automáticamente.
+2. **Sin `-r`** (comportamiento por defecto): no se lee, escribe ni crea ningún
+   archivo de estado. La copia siempre empieza desde cero sin ninguna
+   sobrecarga.
+
+### Formato del archivo de estado
+
+El archivo de estado se ubica en la raíz del directorio de destino:
+
+```json
+{
+  "version": 1,
+  "source": "D:\\proyectos",
+  "destination": "E:\\backup\\proyectos",
+  "started_at": "2026-08-01T18:00:00Z",
+  "updated_at": "2026-08-01T18:05:12Z",
+  "completed_dirs": [
+    "subcarpeta1",
+    "subcarpeta2\\profunda"
+  ]
+}
+```
+
+La reanudación registra **directorios completados**, no archivos individuales.
+Esto evita la contención de E/S entre goroutines y mantiene el archivo de
+estado pequeño.
+
+> [!TIP]
+> Combina `-r` con `-u` si quieres reanudación e incrementalidad a la vez:
+> los directorios ya completados se omiten por completo, y dentro de los nuevos
+> solo se copian los archivos que hayan cambiado.
 
 ---
 
@@ -783,9 +846,10 @@ operaciones a la vez.** Los discos mecánicos no pueden; los SSD sí.
 
 - **Solo Windows.** Depende de la API de Win32; no compila en Linux ni macOS.
 - **No es un espejo.** No borra en destino lo que ya no está en origen.
-- **No reanuda archivos parciales.** Si una copia se interrumpe, el archivo que
-  estaba en curso se vuelve a copiar completo en la siguiente pasada (con `-u`,
-  los que sí terminaron se saltan).
+- **La reanudación es por directorio, no por archivo.** `-r` omite subárboles
+  que completaron en la ejecución anterior; un archivo que estaba en curso se
+  vuelve a copiar completo. Usa `-r -u` juntos para también omitir archivos sin
+  cambios dentro de los subárboles reanudados.
 - **La comparación de `-u` es por tamaño y fecha**, no por contenido. Ver
   [Copias incrementales](#copias-incrementales).
 - **No copia ACL ni flujos alternativos (ADS).** Si necesitas preservar
@@ -826,7 +890,8 @@ go vet ./...
 | `docs/ANALISIS.md` | Análisis técnico completo del proyecto, para desarrolladores |
 | `main.go` | Interfaz de línea de comandos, línea de progreso y resumen final |
 | `args.go` | Saneamiento de argumentos y validación de rutas |
-| `copier.go` | Motor de copia: los dos pools de workers, recorrido, lógica de `-u` y estadísticas |
+| `copier.go` | Motor de copia: los dos pools de workers, recorrido, lógica de `-u`/`-r` y estadísticas |
+| `state.go` | Estado de sesión para `-r`: carga/guarda `.ucsam-state`, escritura atómica, seguimiento de dirs completados |
 | `queue.go` | Cola de directorios y el tipo de trabajo con carpeta compartida que acota la memoria |
 | `winapi.go` | Enlaces directos a `kernel32.dll` (`CopyFileExW`, `CreateDirectoryW`, atributos) |
 | `path.go` | Conversión a rutas extendidas `\\?\` |

@@ -36,6 +36,7 @@ UltraCopySam.exe "D:\projects" "E:\backup\projects"
 - [Options](#options)
 - [Examples](#examples)
 - [Incremental copies](#incremental-copies)
+- [Resume interrupted copies](#resume-interrupted-copies)
 - [Benchmarks vs robocopy](#benchmarks-vs-robocopy)
 - [Should you use this instead of robocopy?](#should-you-use-this-instead-of-robocopy)
 - [Double quotes and paths with spaces](#double-quotes-and-paths-with-spaces)
@@ -165,6 +166,10 @@ The available routes, should the project grow:
   marked *read-only*, *hidden* or *system*.
 - **Incremental mode** (`-u`): skips files whose size and timestamp already
   match at the destination.
+- **Resume mode** (`-r`): resumes an interrupted copy using a `.ucsam-state`
+  file at the destination root. Completed subtrees are skipped entirely;
+  partial files are re-copied cleanly. State is flushed atomically every 2 s
+  and on `Ctrl+C`. The state file is deleted automatically on success.
 - **No `MAX_PATH` limit**: handles paths longer than 260 characters through the
   `\\?\` extended prefix.
 - **Fault tolerant**: a locked or permission-denied file does not abort the
@@ -447,6 +452,59 @@ timestamps to that granularity. The filesystem is detected automatically.
 > undetected. This is practically impossible by accident, but if you need
 > absolute certainty that the destination mirrors the source, run without `-u`:
 > the normal mode always rewrites.
+
+---
+
+## Resume interrupted copies
+
+With `-r`, if a previous copy to the same destination was interrupted, the
+copy resumes from where it left off instead of starting from scratch.
+
+```powershell
+UltraCopySam -r "D:\projects" "E:\backup\projects"
+```
+
+```text
+25000 files, 1200 directories, 4500.00 MB in 15.2s (296.05 MB/s)
+18400 elements resumed (skipped as already completed)
+3 partial files corrected and re-copied cleanly
+```
+
+### How it works
+
+1. **With `-r` active**: UltraCopySam looks for `<destination>\.ucsam-state`.
+   If found and the source matches, it loads the state and resumes. The state
+   file is updated on disk every 2 seconds and on `Ctrl+C` (atomic write:
+   `.tmp` → rename). When the copy completes at 100%, the state file is
+   deleted automatically.
+2. **Without `-r`** (default): no state file is read, written or created.
+   The copy always starts from zero with no overhead.
+
+### State file format
+
+The state file lives at the root of the destination directory:
+
+```json
+{
+  "version": 1,
+  "source": "D:\\projects",
+  "destination": "E:\\backup\\projects",
+  "started_at": "2026-08-01T18:00:00Z",
+  "updated_at": "2026-08-01T18:05:12Z",
+  "completed_dirs": [
+    "subdir1",
+    "subdir2\\nested"
+  ]
+}
+```
+
+Resume tracks **completed directories**, not individual files. This avoids I/O
+contention across goroutines and keeps the state file small.
+
+> [!TIP]
+> Combine `-r` with `-u` if you want both resume and incremental behaviour:
+> already-completed directories are skipped outright, and within new
+> directories only changed files are copied.
 
 ---
 
@@ -769,9 +827,10 @@ operations at once.** Mechanical drives cannot; SSDs can.
   macOS.
 - **Not a mirror.** It never deletes destination files that are gone from the
   source.
-- **No partial-file resume.** If a copy is interrupted, the file in flight is
-  copied again in full next time (with `-u`, the ones that did finish are
-  skipped).
+- **Resume is directory-level, not file-level.** `-r` skips subtrees that
+  completed in the previous run; a file that was mid-copy is re-copied in
+  full. Use `-r -u` together to also skip unchanged files within resumed
+  subtrees.
 - **`-u` compares size and timestamp**, not content. See
   [Incremental copies](#incremental-copies).
 - **No ACL or alternate data stream copying.** If you need NTFS permissions
@@ -809,7 +868,8 @@ go vet ./...
 | --- | --- |
 | `main.go` | Command-line interface, progress line and final summary |
 | `args.go` | Argument sanitising and path validation |
-| `copier.go` | Copy engine: the two worker pools, tree walk, `-u` logic and stats |
+| `copier.go` | Copy engine: the two worker pools, tree walk, `-u`/`-r` logic and stats |
+| `state.go` | Session state for `-r`: load/save `.ucsam-state`, atomic flush, completed-dir tracking |
 | `queue.go` | Directory queue and the shared-parent job type that bounds memory |
 | `winapi.go` | Direct bindings to `kernel32.dll` (`CopyFileExW`, `CreateDirectoryW`, attributes, volume info) |
 | `path.go` | Conversion to extended `\\?\` paths |

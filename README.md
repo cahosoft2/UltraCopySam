@@ -21,6 +21,7 @@ UltraCopySam.exe "D:\proyectos" "E:\backup\proyectos"
 ## Índice
 
 - [Descarga](#descarga)
+- [Windows SmartScreen y antivirus](#windows-smartscreen-y-antivirus)
 - [Características](#características)
 - [Instalación](#instalación)
 - [Uso](#uso)
@@ -60,14 +61,86 @@ Get-FileHash UltraCopySamV001.exe -Algorithm SHA256
 ```
 
 > [!NOTE]
-> **Windows SmartScreen mostrará una advertencia** la primera vez que lo
-> ejecutes: *"Windows protegió su PC"*. Ocurre porque el ejecutable no está
-> firmado con un certificado de código, no porque el programa sea peligroso.
-> Pulsa **Más información → Ejecutar de todas formas**.
->
-> Por el mismo motivo, algunos antivirus marcan falsos positivos con binarios
-> de Go sin firmar. Si prefieres no confiar en el binario publicado, puedes
-> [compilarlo tú mismo](#compilación) desde el código fuente: son dos líneas.
+> Windows mostrará la advertencia *"Windows protegió su PC"* la primera vez que
+> ejecutes el archivo descargado. Es normal y tiene solución en un solo comando:
+> ver [Windows SmartScreen y antivirus](#windows-smartscreen-y-antivirus).
+
+---
+
+## Windows SmartScreen y antivirus
+
+Al ejecutar el `.exe` recién descargado, Windows muestra una pantalla azul con
+el mensaje **"Windows protegió su PC"** y solo ofrece el botón *No ejecutar*.
+
+**Esto no significa que el programa sea peligroso.** Ocurre porque el
+ejecutable no está firmado con un certificado de código, que cuesta entre 300 y
+600 USD al año. Windows marca todo binario descargado de internet y sin firmar,
+sin importar lo que haga.
+
+Tienes tres formas de resolverlo, de la más rápida a la más segura.
+
+### Opción 1 — Desbloquear el archivo (recomendada)
+
+Al descargar cualquier archivo, Windows le añade una marca invisible llamada
+*Mark of the Web* que indica "esto vino de internet". Basta con quitarla:
+
+```powershell
+Unblock-File .\UltraCopySamV001.exe
+```
+
+A partir de ahí el programa se ejecuta con normalidad, sin más advertencias.
+
+También puedes hacerlo con el ratón: clic derecho sobre el archivo →
+**Propiedades** → marcar la casilla **Desbloquear** al final de la pestaña
+*General* → *Aceptar*.
+
+### Opción 2 — Ejecutarlo de todas formas
+
+En la propia pantalla de advertencia, pulsa **Más información** y luego el
+botón **Ejecutar de todas formas** que aparece debajo. Windows recordará la
+decisión para ese archivo.
+
+### Opción 3 — Compilarlo tú mismo (la más segura)
+
+Si prefieres no confiar en un ejecutable descargado —una postura razonable
+tratándose de una herramienta que sobrescribe archivos—, compílalo desde el
+código fuente. Un binario compilado en tu propia máquina **nunca dispara
+SmartScreen**, porque no procede de internet:
+
+```powershell
+git clone https://github.com/cahosoft2/UltraCopySam.git
+cd UltraCopySam
+go build -trimpath -ldflags "-s -w" -o UltraCopySam.exe .
+```
+
+Requiere [Go](https://go.dev/dl/) instalado. Todo el código fuente son unas
+1200 líneas repartidas en 6 archivos, auditables en unos minutos.
+
+### Sobre los falsos positivos de antivirus
+
+Los binarios de Go sin firmar generan falsos positivos con cierta frecuencia,
+porque el compilador enlaza todo estáticamente en un único archivo y varios
+motores heurísticos consideran ese patrón sospechoso.
+
+Si tu antivirus bloquea el archivo, verifica primero su huella SHA256 (ver
+[Descarga](#descarga)): si coincide con la publicada, el archivo es
+exactamente el que se compiló y no ha sido alterado. Después, añade una
+exclusión o utiliza la Opción 3.
+
+### ¿Por qué no está firmado?
+
+Firmar un ejecutable para Windows exige un certificado de código de una
+autoridad reconocida, con verificación de identidad y renovación anual. Para
+una utilidad gratuita de código abierto el coste no se justifica.
+
+Las alternativas que existen, por si el proyecto crece:
+
+| Vía | Coste aproximado | ¿Elimina SmartScreen? |
+| --- | --- | --- |
+| [Azure Trusted Signing](https://azure.microsoft.com/products/trusted-signing) | ~10 USD/mes | Sí, de inmediato |
+| Certificado EV (DigiCert, Sectigo…) | 300-600 USD/año | Sí, de inmediato |
+| [SignPath Foundation](https://signpath.org/) (gratis para OSS) | Gratis | Progresivamente, al acumular reputación |
+| Publicar en Microsoft Store | ~19 USD, pago único | Sí (las apps de la Store no pasan por SmartScreen) |
 
 ---
 
